@@ -26,7 +26,9 @@ import {
 } from "lucide-react";
 import { LoginPanel } from "@/components/LoginPanel";
 import { UserAccessPanel } from "@/components/UserAccessPanel";
+import { corelinkApi } from "@/lib/corelinkApi";
 import { wakeApi } from "@/lib/api";
+import type { CorelinkJob, CorelinkJobType, CorelinkMachine, CorelinkStatus } from "@/types/corelink";
 import type {
   WakeAccessUser,
   WakeComponentType,
@@ -50,6 +52,7 @@ type DeviceFormState = {
   broadcast_address: string;
   port: string;
   description: string;
+  corelink_machine_key: string;
   is_enabled: boolean;
   sort_order: string;
   components: DeviceComponentFormState[];
@@ -169,6 +172,7 @@ const EMPTY_FORM: DeviceFormState = {
   broadcast_address: "",
   port: "9",
   description: "",
+  corelink_machine_key: "",
   is_enabled: true,
   sort_order: "0",
   components: [],
@@ -218,6 +222,7 @@ const mapDeviceToForm = (device: WakeDevice): DeviceFormState => ({
   broadcast_address: device.broadcast_address,
   port: String(device.port),
   description: device.description,
+  corelink_machine_key: device.corelink_machine_key,
   is_enabled: device.is_enabled,
   sort_order: String(device.sort_order),
   components: device.components.map((component) => ({
@@ -235,6 +240,7 @@ const normalizeForm = (form: DeviceFormState) => ({
   broadcast_address: form.broadcast_address.trim(),
   port: Number(form.port || 9),
   description: form.description.trim(),
+  corelink_machine_key: normalizeCorelinkKeyInput(form.corelink_machine_key),
   is_enabled: form.is_enabled,
   sort_order: Number(form.sort_order || 0),
   components: form.components
@@ -258,6 +264,66 @@ const formatPowerStateLabel = (state: WakeDevice["power_state"]): string => {
   }
 };
 
+const normalizeCorelinkKeyInput = (value: string): string => {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9_.-]+/g, "-")
+    .replace(/^[-_.]+|[-_.]+$/g, "")
+    .slice(0, 96);
+};
+
+const formatCorelinkState = (machine: CorelinkMachine | null | undefined): string => {
+  if (!machine) {
+    return "Introuvable";
+  }
+
+  if (machine.is_online) {
+    return "Agent en ligne";
+  }
+
+  if (machine.status === "stopped") {
+    return "Agent arrete";
+  }
+
+  return "Agent hors-ligne";
+};
+
+const formatMetricPercent = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+
+  return `${Math.round(value)}%`;
+};
+
+const formatMemoryUsage = (machine: CorelinkMachine | null | undefined): string => {
+  const metric = machine?.latest_metric;
+  if (!metric?.memory_total_mb) {
+    return "-";
+  }
+
+  const usedGb = ((metric.memory_used_mb ?? 0) / 1024).toFixed(1);
+  const totalGb = (metric.memory_total_mb / 1024).toFixed(1);
+
+  return `${usedGb}/${totalGb} Go`;
+};
+
+const getCorelinkJobLabel = (job: CorelinkJob): string => {
+  switch (job.job_type) {
+    case "collect_metrics":
+      return "Collecte metriques";
+    case "shutdown":
+      return "Extinction";
+    case "reboot":
+      return "Redemarrage";
+    case "sleep":
+      return "Mise en veille";
+    default:
+      return String(job.job_type);
+  }
+};
+
 function App() {
   const auth = useAuth();
   const [status, setStatus] = useState<WakeStatus | null>(null);
@@ -272,6 +338,10 @@ function App() {
   const [users, setUsers] = useState<WakeAccessUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<number | null>(null);
+  const [corelinkStatus, setCorelinkStatus] = useState<CorelinkStatus | null>(null);
+  const [corelinkMachines, setCorelinkMachines] = useState<Record<string, CorelinkMachine | null>>({});
+  const [corelinkJobs, setCorelinkJobs] = useState<Record<string, CorelinkJob[]>>({});
+  const [activeCorelinkJob, setActiveCorelinkJob] = useState<string | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [notice, setNotice] = useState<NoticeState>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -336,6 +406,55 @@ function App() {
     scrollToEditor();
   };
 
+  const loadCorelinkSnapshot = async (sourceDevices: WakeDevice[], showErrors = false) => {
+    const machineKeys = Array.from(
+      new Set(sourceDevices.map((device) => normalizeCorelinkKeyInput(device.corelink_machine_key)).filter(Boolean))
+    );
+
+    if (machineKeys.length === 0) {
+      setCorelinkStatus(null);
+      setCorelinkMachines({});
+      setCorelinkJobs({});
+      return;
+    }
+
+    const statusResponse = await corelinkApi.getStatus();
+    const nextStatus = statusResponse.data;
+    setCorelinkStatus(nextStatus);
+
+    if (!statusResponse.ok || !nextStatus?.authenticated || !nextStatus.can_view) {
+      setCorelinkMachines({});
+      setCorelinkJobs({});
+      return;
+    }
+
+    const snapshots = await Promise.all(
+      machineKeys.map(async (machineKey) => {
+        const [machineResponse, jobsResponse] = await Promise.all([
+          corelinkApi.getMachine(machineKey),
+          corelinkApi.listActiveJobs(machineKey),
+        ]);
+
+        if (showErrors && !machineResponse.ok && machineResponse.status !== 404) {
+          setNotice({ kind: "error", text: machineResponse.error ?? "Lecture Corelink impossible." });
+        }
+
+        return {
+          machineKey,
+          machine: machineResponse.ok ? machineResponse.data : null,
+          jobs: jobsResponse.ok ? jobsResponse.data ?? [] : [],
+        };
+      })
+    );
+
+    setCorelinkMachines(
+      Object.fromEntries(snapshots.map((snapshot) => [snapshot.machineKey, snapshot.machine]))
+    );
+    setCorelinkJobs(
+      Object.fromEntries(snapshots.map((snapshot) => [snapshot.machineKey, snapshot.jobs]))
+    );
+  };
+
   const loadData = async (showRefreshState = false, showErrors = true, includeUsers = true) => {
     if (isLoadingDataRef.current) {
       return;
@@ -359,6 +478,9 @@ function App() {
           user: null,
         });
         setDevices([]);
+        setCorelinkStatus(null);
+        setCorelinkMachines({});
+        setCorelinkJobs({});
         if (showErrors && statusResponse.error) {
           setNotice({ kind: "error", text: statusResponse.error });
         }
@@ -369,6 +491,9 @@ function App() {
 
       if (!statusResponse.data.authenticated || !statusResponse.data.can_wake) {
         setDevices([]);
+        setCorelinkStatus(null);
+        setCorelinkMachines({});
+        setCorelinkJobs({});
         setUsers([]);
         return;
       }
@@ -391,6 +516,7 @@ function App() {
       }
 
       setDevices(devicesResponse.data);
+      await loadCorelinkSnapshot(devicesResponse.data, showErrors);
 
       if (!statusResponse.data.can_manage) {
         setUsers([]);
@@ -495,6 +621,9 @@ function App() {
     } finally {
       resetForm();
       setDevices([]);
+      setCorelinkStatus(null);
+      setCorelinkMachines({});
+      setCorelinkJobs({});
       setUsers([]);
       setStatus({
         authenticated: false,
@@ -524,6 +653,44 @@ function App() {
       await loadData();
     } finally {
       setActiveWakeId(null);
+    }
+  };
+
+  const handleCorelinkJob = async (device: WakeDevice, jobType: CorelinkJobType) => {
+    const machineKey = normalizeCorelinkKeyInput(device.corelink_machine_key);
+    if (!machineKey) {
+      return;
+    }
+
+    const confirmLabels: Partial<Record<CorelinkJobType, string>> = {
+      shutdown: `Eteindre ${device.name} via Corelink ?`,
+      reboot: `Redemarrer ${device.name} via Corelink ?`,
+      sleep: `Mettre ${device.name} en veille via Corelink ?`,
+    };
+
+    const confirmLabel = confirmLabels[jobType];
+    if (confirmLabel && !window.confirm(confirmLabel)) {
+      return;
+    }
+
+    const activeKey = `${device.id}:${jobType}`;
+    setActiveCorelinkJob(activeKey);
+
+    try {
+      const response = await corelinkApi.createJob({
+        machine_key: machineKey,
+        job_type: jobType,
+      });
+
+      if (!response.ok) {
+        setNotice({ kind: "error", text: response.error ?? "Job Corelink impossible." });
+        return;
+      }
+
+      setNotice({ kind: "success", text: "Job Corelink ajoute." });
+      await loadCorelinkSnapshot(devices, false);
+    } finally {
+      setActiveCorelinkJob(null);
     }
   };
 
@@ -766,6 +933,12 @@ function App() {
             <div className="device-list">
               {sortedDevices.map((device) => {
                 const isOnline = device.power_state === "online";
+                const corelinkKey = normalizeCorelinkKeyInput(device.corelink_machine_key);
+                const corelinkMachine = corelinkKey ? corelinkMachines[corelinkKey] : null;
+                const linkedCorelinkJobs = corelinkKey ? corelinkJobs[corelinkKey] ?? [] : [];
+                const hasCorelinkAccess = Boolean(corelinkStatus?.authenticated && corelinkStatus.can_view);
+                const canExecuteCorelinkJobs = Boolean(corelinkStatus?.can_execute_jobs);
+                const corelinkActionBlocked = !canExecuteCorelinkJobs || !corelinkMachine?.is_online || activeCorelinkJob !== null;
 
                 return (
                   <article key={device.id} className={`device-card ${device.is_enabled ? "" : "is-disabled"}`}>
@@ -824,6 +997,92 @@ function App() {
 
                       {device.power_state === "unknown" && device.power_state_reason ? (
                         <p className="helper-note">Statut indisponible: {device.power_state_reason}</p>
+                      ) : null}
+
+                      {corelinkKey ? (
+                        <div className="corelink-panel">
+                          <div className="corelink-panel-head">
+                            <div>
+                              <span>Corelink</span>
+                              <strong>{corelinkMachine?.display_name ?? corelinkKey}</strong>
+                            </div>
+                            <span className={`state-badge ${corelinkMachine?.is_online ? "state-online" : "state-unknown"}`}>
+                              {hasCorelinkAccess ? formatCorelinkState(corelinkMachine) : "Acces requis"}
+                            </span>
+                          </div>
+
+                          {hasCorelinkAccess ? (
+                            <>
+                              <div className="corelink-facts">
+                                <div>
+                                  <span>CPU</span>
+                                  <strong>{formatMetricPercent(corelinkMachine?.latest_metric?.cpu_usage_percent)}</strong>
+                                </div>
+                                <div>
+                                  <span>RAM</span>
+                                  <strong>{formatMemoryUsage(corelinkMachine)}</strong>
+                                </div>
+                                <div>
+                                  <span>Vu</span>
+                                  <strong>{formatDateTime(corelinkMachine?.last_seen_at ?? null)}</strong>
+                                </div>
+                                <div>
+                                  <span>Jobs actifs</span>
+                                  <strong>{linkedCorelinkJobs.length}</strong>
+                                </div>
+                              </div>
+
+                              {linkedCorelinkJobs.length > 0 ? (
+                                <div className="corelink-job-strip">
+                                  {linkedCorelinkJobs.map((job) => (
+                                    <span key={job.id}>{getCorelinkJobLabel(job)}</span>
+                                  ))}
+                                </div>
+                              ) : null}
+
+                              <div className="corelink-actions">
+                                <button
+                                  className="icon-button text-button"
+                                  type="button"
+                                  disabled={corelinkActionBlocked}
+                                  onClick={() => void handleCorelinkJob(device, "collect_metrics")}
+                                >
+                                  <Activity size={16} />
+                                  {activeCorelinkJob === `${device.id}:collect_metrics` ? "Mesure" : "Mesurer"}
+                                </button>
+                                <button
+                                  className="icon-button text-button"
+                                  type="button"
+                                  disabled={corelinkActionBlocked}
+                                  onClick={() => void handleCorelinkJob(device, "sleep")}
+                                >
+                                  <Monitor size={16} />
+                                  {activeCorelinkJob === `${device.id}:sleep` ? "Veille" : "Veille"}
+                                </button>
+                                <button
+                                  className="icon-button text-button"
+                                  type="button"
+                                  disabled={corelinkActionBlocked}
+                                  onClick={() => void handleCorelinkJob(device, "reboot")}
+                                >
+                                  <RefreshCw size={16} />
+                                  {activeCorelinkJob === `${device.id}:reboot` ? "Redemarrage" : "Redemarrer"}
+                                </button>
+                                <button
+                                  className="icon-button danger-button"
+                                  type="button"
+                                  disabled={corelinkActionBlocked}
+                                  onClick={() => void handleCorelinkJob(device, "shutdown")}
+                                >
+                                  <Power size={16} />
+                                  {activeCorelinkJob === `${device.id}:shutdown` ? "Extinction" : "Eteindre"}
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <p className="helper-note">La machine est liee, mais ce compte n'a pas acces a Corelink.</p>
+                          )}
+                        </div>
                       ) : null}
                     </div>
 
@@ -888,6 +1147,24 @@ function App() {
                     rows={3}
                     value={form.description}
                     onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                  />
+                </label>
+              </fieldset>
+
+              <fieldset>
+                <legend>Corelink</legend>
+                <label>
+                  <span>Cle machine Corelink</span>
+                  <input
+                    type="text"
+                    placeholder="gooba"
+                    value={form.corelink_machine_key}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        corelink_machine_key: normalizeCorelinkKeyInput(event.target.value),
+                      }))
+                    }
                   />
                 </label>
               </fieldset>

@@ -25,6 +25,7 @@ type DevicePayload = {
   broadcast_address: string;
   port: number;
   description: string;
+  corelink_machine_key: string;
   is_enabled: boolean;
   sort_order: number;
   components: WakeDeviceComponent[];

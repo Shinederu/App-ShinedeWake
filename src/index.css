@@ -580,6 +580,86 @@ legend {
   overflow-wrap: anywhere;
 }
 
+.corelink-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(123, 188, 255, 0.07);
+  border: 1px solid rgba(123, 188, 255, 0.18);
+  border-radius: 8px;
+}
+
+.corelink-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.corelink-panel-head > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.corelink-panel-head span,
+.corelink-facts span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.corelink-panel-head strong,
+.corelink-facts strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.corelink-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.corelink-facts div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.corelink-job-strip {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.corelink-job-strip span {
+  padding: 5px 8px;
+  color: var(--blue);
+  background: var(--blue-soft);
+  border: 1px solid rgba(123, 188, 255, 0.2);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.corelink-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.corelink-actions .icon-button {
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 0.86rem;
+}
+
 .device-actions {
   align-content: start;
   justify-content: flex-end;
@@ -776,6 +856,8 @@ legend {
 
   .workspace-layout,
   .device-facts,
+  .corelink-facts,
+  .corelink-actions,
   .field-row,
   .user-meta {
     grid-template-columns: 1fr;

@@ -31,6 +31,10 @@ Le frontend consomme:
 - `DELETE https://api.shinederu.ch/wake/?action=deleteDevice`
 - `GET https://api.shinederu.ch/wake/?action=listUsers`
 - `PUT https://api.shinederu.ch/wake/?action=updateUserPermissions`
+- `GET https://api.shinederu.ch/corelink/?action=status`
+- `GET https://api.shinederu.ch/corelink/?action=getMachine&machine_key=<key>`
+- `GET https://api.shinederu.ch/corelink/?action=listJobs&machine_key=<key>&status=active`
+- `POST https://api.shinederu.ch/corelink/?action=createJob`
 
 ## Authentification et permissions
 
@@ -98,6 +102,7 @@ Variables Vite:
 
 - `VITE_SHINEDERU_API_AUTH_URL=https://api.shinederu.ch/auth/`
 - `VITE_SHINEDEWAKE_API_URL=https://api.shinederu.ch/wake/`
+- `VITE_CORELINK_API_URL=https://api.shinederu.ch/corelink/`
 
 Ces valeurs sont publiques. Ne pas ajouter de secret dans les `.env` frontend.
 
