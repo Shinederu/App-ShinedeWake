@@ -665,7 +665,6 @@ function App() {
     const confirmLabels: Partial<Record<CorelinkJobType, string>> = {
       shutdown: `Eteindre ${device.name} via Corelink ?`,
       reboot: `Redemarrer ${device.name} via Corelink ?`,
-      sleep: `Mettre ${device.name} en veille via Corelink ?`,
     };
 
     const confirmLabel = confirmLabels[jobType];
@@ -1049,15 +1048,6 @@ function App() {
                                 >
                                   <Activity size={16} />
                                   {activeCorelinkJob === `${device.id}:collect_metrics` ? "Mesure" : "Mesurer"}
-                                </button>
-                                <button
-                                  className="icon-button text-button"
-                                  type="button"
-                                  disabled={corelinkActionBlocked}
-                                  onClick={() => void handleCorelinkJob(device, "sleep")}
-                                >
-                                  <Monitor size={16} />
-                                  {activeCorelinkJob === `${device.id}:sleep` ? "Veille" : "Veille"}
                                 </button>
                                 <button
                                   className="icon-button text-button"
