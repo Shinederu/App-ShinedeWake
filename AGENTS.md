@@ -61,15 +61,14 @@ Modifier en DEV, builder, commit/push, puis deployer `dist\` si necessaire.
 ## Corelink
 
 Le frontend peut afficher les machines Corelink liees par `corelink_machine_key`
-et proposer les jobs suivants:
+et proposer l'action suivante quand une machine liee est allumee:
 
-- `collect_metrics`
-- `reboot`
 - `shutdown`
 
-Le bouton `Veille` ne doit pas etre reintegre dans Wake sans demande explicite.
-Un libelle de compatibilite peut rester pour afficher un ancien job `sleep`
-renvoye par Corelink, mais Wake ne doit pas proposer cette action.
+Les boutons `Veille`, `Mesurer` et `Redemarrer` ne doivent pas etre reintegres
+dans Wake sans demande explicite. Un libelle de compatibilite peut rester pour
+afficher d'anciens jobs `sleep`, `collect_metrics` ou `reboot` renvoyes par
+Corelink, mais Wake ne doit pas proposer ces actions.
 
 ## Temps reel
 
@@ -94,7 +93,8 @@ Smoke test conseille:
 - edition machine et composants si gestionnaire;
 - panneau permissions si gestionnaire;
 - panneau Corelink sur une machine liee;
-- absence du bouton `Veille`.
+- bouton `Eteindre` a la place de `Allume` quand la machine est allumee;
+- absence des boutons `Veille`, `Mesurer` et `Redemarrer`.
 
 ## Deploiement
 

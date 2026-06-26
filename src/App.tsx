@@ -309,6 +309,45 @@ const formatMemoryUsage = (machine: CorelinkMachine | null | undefined): string 
   return `${usedGb}/${totalGb} Go`;
 };
 
+const formatStorageUsage = (machine: CorelinkMachine | null | undefined): string => {
+  const disks = machine?.latest_metric?.disks ?? [];
+  const byteDisks = disks
+    .map((disk) => {
+      const total = disk.total_bytes ?? 0;
+      if (!Number.isFinite(total) || total <= 0) {
+        return null;
+      }
+
+      const used = disk.used_bytes ?? (disk.free_bytes !== undefined ? total - disk.free_bytes : null);
+      if (used === null || !Number.isFinite(used)) {
+        return null;
+      }
+
+      return {
+        total,
+        used: Math.max(0, Math.min(used, total)),
+      };
+    })
+    .filter((disk): disk is { total: number; used: number } => disk !== null);
+
+  if (byteDisks.length > 0) {
+    const total = byteDisks.reduce((sum, disk) => sum + disk.total, 0);
+    const used = byteDisks.reduce((sum, disk) => sum + disk.used, 0);
+    return `${Math.round((used / total) * 100)}%`;
+  }
+
+  const percents = disks
+    .map((disk) => disk.used_percent)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+  if (percents.length === 0) {
+    return "-";
+  }
+
+  const average = percents.reduce((sum, value) => sum + value, 0) / percents.length;
+  return `${Math.round(Math.max(0, Math.min(average, 100)))}%`;
+};
+
 const getCorelinkJobLabel = (job: CorelinkJob): string => {
   switch (job.job_type) {
     case "collect_metrics":
@@ -664,7 +703,6 @@ function App() {
 
     const confirmLabels: Partial<Record<CorelinkJobType, string>> = {
       shutdown: `Eteindre ${device.name} via Corelink ?`,
-      reboot: `Redemarrer ${device.name} via Corelink ?`,
     };
 
     const confirmLabel = confirmLabels[jobType];
@@ -937,7 +975,25 @@ function App() {
                 const linkedCorelinkJobs = corelinkKey ? corelinkJobs[corelinkKey] ?? [] : [];
                 const hasCorelinkAccess = Boolean(corelinkStatus?.authenticated && corelinkStatus.can_view);
                 const canExecuteCorelinkJobs = Boolean(corelinkStatus?.can_execute_jobs);
-                const corelinkActionBlocked = !canExecuteCorelinkJobs || !corelinkMachine?.is_online || activeCorelinkJob !== null;
+                const shutdownActionKey = `${device.id}:shutdown`;
+                const shutdownInProgress = activeCorelinkJob === shutdownActionKey;
+                const canShutdownWithCorelink = Boolean(
+                  corelinkKey &&
+                    hasCorelinkAccess &&
+                    canExecuteCorelinkJobs &&
+                    corelinkMachine?.is_online
+                );
+                const primaryActionDisabled =
+                  !device.is_enabled ||
+                  activeWakeId === device.id ||
+                  (isOnline ? !canShutdownWithCorelink || activeCorelinkJob !== null : false);
+                const primaryActionLabel = isOnline
+                  ? shutdownInProgress
+                    ? "Extinction"
+                    : "Eteindre"
+                  : activeWakeId === device.id
+                    ? "Envoi"
+                    : "Reveiller";
 
                 return (
                   <article key={device.id} className={`device-card ${device.is_enabled ? "" : "is-disabled"}`}>
@@ -1022,6 +1078,10 @@ function App() {
                                   <strong>{formatMemoryUsage(corelinkMachine)}</strong>
                                 </div>
                                 <div>
+                                  <span>Stockage</span>
+                                  <strong>{formatStorageUsage(corelinkMachine)}</strong>
+                                </div>
+                                <div>
                                   <span>Vu</span>
                                   <strong>{formatDateTime(corelinkMachine?.last_seen_at ?? null)}</strong>
                                 </div>
@@ -1038,36 +1098,6 @@ function App() {
                                   ))}
                                 </div>
                               ) : null}
-
-                              <div className="corelink-actions">
-                                <button
-                                  className="icon-button text-button"
-                                  type="button"
-                                  disabled={corelinkActionBlocked}
-                                  onClick={() => void handleCorelinkJob(device, "collect_metrics")}
-                                >
-                                  <Activity size={16} />
-                                  {activeCorelinkJob === `${device.id}:collect_metrics` ? "Mesure" : "Mesurer"}
-                                </button>
-                                <button
-                                  className="icon-button text-button"
-                                  type="button"
-                                  disabled={corelinkActionBlocked}
-                                  onClick={() => void handleCorelinkJob(device, "reboot")}
-                                >
-                                  <RefreshCw size={16} />
-                                  {activeCorelinkJob === `${device.id}:reboot` ? "Redemarrage" : "Redemarrer"}
-                                </button>
-                                <button
-                                  className="icon-button danger-button"
-                                  type="button"
-                                  disabled={corelinkActionBlocked}
-                                  onClick={() => void handleCorelinkJob(device, "shutdown")}
-                                >
-                                  <Power size={16} />
-                                  {activeCorelinkJob === `${device.id}:shutdown` ? "Extinction" : "Eteindre"}
-                                </button>
-                              </div>
                             </>
                           ) : (
                             <p className="helper-note">La machine est liee, mais ce compte n'a pas acces a Corelink.</p>
@@ -1078,12 +1108,24 @@ function App() {
 
                     <div className="device-actions">
                       <button
-                        className="icon-button primary-button"
-                        disabled={!device.is_enabled || activeWakeId === device.id || isOnline}
-                        onClick={() => void handleWake(device.id)}
+                        className={`icon-button ${isOnline ? "danger-button" : "primary-button"}`}
+                        disabled={primaryActionDisabled}
+                        title={
+                          isOnline && !canShutdownWithCorelink && !shutdownInProgress
+                            ? "Corelink doit etre en ligne avec les droits jobs pour eteindre cette machine."
+                            : undefined
+                        }
+                        onClick={() => {
+                          if (isOnline) {
+                            void handleCorelinkJob(device, "shutdown");
+                            return;
+                          }
+
+                          void handleWake(device.id);
+                        }}
                       >
                         <Power size={18} />
-                        {activeWakeId === device.id ? "Envoi" : isOnline ? "Allume" : "Reveiller"}
+                        {primaryActionLabel}
                       </button>
 
                       {canManage ? (

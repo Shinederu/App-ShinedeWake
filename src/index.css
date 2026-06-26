@@ -618,7 +618,7 @@ legend {
 
 .corelink-facts {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -646,18 +646,6 @@ legend {
   border-radius: 8px;
   font-size: 0.78rem;
   font-weight: 800;
-}
-
-.corelink-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.corelink-actions .icon-button {
-  min-height: 38px;
-  padding: 0 10px;
-  font-size: 0.86rem;
 }
 
 .device-actions {
@@ -857,7 +845,6 @@ legend {
   .workspace-layout,
   .device-facts,
   .corelink-facts,
-  .corelink-actions,
   .field-row,
   .user-meta {
     grid-template-columns: 1fr;

@@ -32,7 +32,7 @@ export type CorelinkMachine = {
   latest_metric: CorelinkMetric | null;
 };
 
-export type CorelinkJobType = "shutdown" | "reboot" | "collect_metrics";
+export type CorelinkJobType = "shutdown";
 
 export type CorelinkJob = {
   id: number;

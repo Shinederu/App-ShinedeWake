@@ -12,7 +12,7 @@ ShinedeWake permet aux utilisateurs autorises de:
 - envoyer une commande Wake-on-LAN via l'API proprietaire Wake;
 - consulter l'etat de puissance estime par l'API Wake;
 - visualiser les informations Corelink des machines liees;
-- demander des jobs Corelink autorises (`collect_metrics`, `reboot`, `shutdown`);
+- demander l'extinction Corelink autorisee (`shutdown`) quand une machine liee est allumee;
 - maintenir les machines, leurs composants materiels et les acces utilisateurs quand ils ont les droits de gestion.
 
 Le frontend ne fait jamais de Wake-on-LAN directement, ne se connecte pas a MySQL
@@ -91,7 +91,7 @@ Permissions Corelink:
 
 - Le frontend lit seulement `corelink.status.can_view` et `corelink.status.can_execute_jobs`.
 - Les droits Corelink ne sont pas geres par Wake.
-- Les actions Corelink sont disponibles uniquement quand la machine Wake possede un `corelink_machine_key`, que l'agent est en ligne, qu'aucun job actif ne bloque l'action, et que l'utilisateur a les droits Corelink requis.
+- L'action d'extinction Corelink est disponible uniquement quand la machine Wake possede un `corelink_machine_key`, que l'agent est en ligne, qu'aucun job actif ne bloque l'action, et que l'utilisateur a les droits Corelink requis.
 
 ## Base de donnees
 
@@ -208,7 +208,8 @@ Smoke test manuel conseille apres build/deploiement:
 5. ouvrir l'editeur machine si `wake.devices.manage`;
 6. verifier les permissions utilisateurs si `wake.users.manage`;
 7. verifier le panneau Corelink sur une machine liee;
-8. confirmer que les actions visibles sont `Mesurer`, `Redemarrer`, `Eteindre`.
+8. confirmer que le bouton principal devient `Eteindre` quand la machine est allumee;
+9. confirmer que les boutons `Mesurer` et `Redemarrer` ne sont plus visibles.
 
 Le bouton `Veille` n'est pas expose dans l'interface Wake.
 
@@ -229,7 +230,9 @@ PROD.
 
 - Etat documente le 2026-06-26.
 - Les derniers changements durables connus concernent l'integration Corelink,
-  le retrait du bouton `Veille`, et l'endpoint interne Wake cote API pour les
-  appels Arcadia/Corelink.
+  le retrait des boutons `Veille`, `Mesurer` et `Redemarrer`, le bouton
+  principal `Eteindre` quand une machine est allumee, l'affichage du pourcentage
+  de stockage Corelink, et l'endpoint interne Wake cote API pour les appels
+  Arcadia/Corelink.
 - Si une correction urgente a ete faite directement en PROD, comparer le contenu
   et les dates avant de redeployer.
