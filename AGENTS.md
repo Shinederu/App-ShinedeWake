@@ -1,9 +1,11 @@
 # Guide Agents - ShinedeWake
 
-Ce depot contient le frontend React/Vite du panel Wake-on-LAN. Il doit rester
-deployable dans `P:\PROD\ShinedeWake` uniquement sous forme d'artefacts `dist\`.
+Ce depot contient le frontend React/Vite du panel Wake. Wake est l'interface
+unique pour le reveil, l'observation de l'agent systeme et l'arret controle des
+machines. Le projet doit rester deployable dans `P:\PROD\ShinedeWake` uniquement
+sous forme d'artefacts `dist\`.
 
-Documentation mise a jour le 2026-06-26.
+Documentation mise a jour le 2026-07-30.
 
 ## Lecture de demarrage
 
@@ -14,24 +16,30 @@ Documentation mise a jour le 2026-06-26.
 5. Lire `P:\DEV\GitHub\AGENTS.md`.
 6. Lire ce fichier.
 7. Lire `README.md`.
-8. Lire `P:\DEV\GitHub\App-ShinedeWake-API\README.md` si le changement touche endpoints, permissions, DB, logs, Mercure ou integrations Corelink/Arcadia.
+8. Lire `P:\DEV\GitHub\App-ShinedeWake-API\README.md` si le changement touche
+   endpoints, permissions, DB, logs, Mercure ou contrat d'agent systeme.
 
 ## Perimetre
 
 - Projet courant: `App-ShinedeWake`.
 - Frontend PROD: `P:\PROD\ShinedeWake`.
-- Backend associe: `App-ShinedeWake-API`, seulement a modifier si l'utilisateur inclut explicitement l'API Wake dans la demande.
-- Ne pas modifier Corelink, Arcadia, Auth ou les modules partages depuis ce depot. Documenter le besoin dans `P:\DEV\AI-Exchange` si un autre projet doit agir.
+- Backend associe: `App-ShinedeWake-API`, seulement a modifier si la demande
+  inclut explicitement l'API Wake.
+- Ne pas modifier Corelink, Auth ou les modules partages depuis ce depot sans
+  demande explicite.
+- Arcadia est archive et ne fait plus partie du contrat Wake.
 
 ## Source de verite
 
 - Frontend DEV: `P:\DEV\GitHub\App-ShinedeWake`
 - Frontend PROD: `P:\PROD\ShinedeWake`
-- API Wake: `https://api.shinederu.ch/wake/`
-- API Corelink consommee: `https://api.shinederu.ch/corelink/`
+- API navigateur unique: `https://api.shinederu.ch/wake/`
 - API Auth: `https://api.shinederu.ch/auth/`
 - Code projet: `wake`
 - Branche normale: `main`
+
+Le navigateur ne doit pas appeler directement l'API Corelink. L'API Wake
+agrege l'etat technique, les dernieres metriques et les arrets actifs.
 
 Ne pas modifier directement `P:\PROD\ShinedeWake` pour un changement durable.
 Modifier en DEV, builder, commit/push, puis deployer `dist\` si necessaire.
@@ -39,42 +47,54 @@ Modifier en DEV, builder, commit/push, puis deployer `dist\` si necessaire.
 ## Structure utile
 
 - `src\App.tsx`: logique d'application et UI principale.
-- `src\lib\api.ts`: client Wake.
-- `src\lib\corelinkApi.ts`: client Corelink.
+- `src\lib\api.ts`: client Wake unique pour les appareils et actions machine.
 - `src\lib\authClient.ts`: client auth commun.
-- `src\types\`: contrats TypeScript des APIs consommees.
+- `src\types\api.ts`: contrat Wake, y compris `device.agent`.
 - `src\components\`: composants React.
 - `src\index.css`: styles.
 - `public\`: assets publics.
 - `dist\`: build Vite, a ne pas modifier a la main.
 
-## Auth, permissions et DB
+## Auth et permissions
 
 - Auth via `Module-Auth-Core` et `Module-Auth-React`.
 - Cookie session: `sid`.
-- Le backend Wake valide `auth_sessions`, `users` et `core_*`.
-- Le frontend reflete `status.can_wake` et `status.can_manage`, mais ne decide jamais l'autorisation finale.
-- Permissions Wake stables: `wake.devices.wake`, `wake.devices.manage`, `wake.users.manage`.
-- Les permissions Corelink sont exposees par Corelink via `can_view` et `can_execute_jobs`; Wake ne les gere pas.
+- Le frontend reflete `status.can_wake`, `status.can_shutdown`,
+  `status.can_manage_devices`, `status.can_manage_users` et le resume
+  `status.can_manage`, mais ne decide jamais l'autorisation finale.
+- Permissions Wake stables:
+  - `wake.devices.wake`
+  - `wake.devices.shutdown`
+  - `wake.devices.manage`
+  - `wake.users.manage`
 - Aucune connexion DB cote frontend.
 
-## Corelink
+## Agent systeme
 
-Le frontend peut afficher les machines Corelink liees par `corelink_machine_key`
-et proposer l'action suivante quand une machine liee est allumee:
+La liaison technique reste stockee dans `corelink_machine_key` pour compatibilite
+DB, mais l'interface emploie les termes `Agent systeme` et `Cle de liaison
+agent`.
 
-- `shutdown`
+`listDevices` fournit directement `device.agent`, avec:
 
-Les boutons `Veille`, `Mesurer` et `Redemarrer` ne doivent pas etre reintegres
-dans Wake sans demande explicite. Un libelle de compatibilite peut rester pour
-afficher d'anciens jobs `sleep`, `collect_metrics` ou `reboot` renvoyes par
-Corelink, mais Wake ne doit pas proposer ces actions.
+- etat et derniere presence;
+- dernieres metriques CPU, RAM, GPU, disques et uptime;
+- jobs d'arret actifs.
+
+Le bouton d'arret utilise uniquement `POST ?action=shutdownDevice`. Il doit etre
+actif seulement si l'utilisateur possede `wake.devices.shutdown`, si l'agent
+lie est en ligne et si aucun arret n'est deja actif. Ne pas reintegrer un client
+Corelink separe ni les actions veille, redemarrage ou mesure sans demande
+explicite.
 
 ## Temps reel
 
-- Rafraichissement HTTP silencieux toutes les 15 secondes quand l'onglet est visible.
-- L'API Wake publie des evenements Mercure `wake.device.*`, mais ce frontend ne s'y abonne pas encore.
-- Toute future integration Mercure doit garder une resynchronisation HTTP via `status` et `listDevices`.
+- Rafraichissement HTTP silencieux toutes les 15 secondes quand l'onglet est
+  visible.
+- L'API Wake publie des evenements Mercure `wake.device.*`, mais ce frontend ne
+  s'y abonne pas encore.
+- Toute future integration Mercure doit garder une resynchronisation HTTP via
+  `status` et `listDevices`.
 
 ## Verifications
 
@@ -88,13 +108,14 @@ rg -n "password|passwd|secret|BEGIN (RSA|OPENSSH|PRIVATE)|api_key|token" P:\DEV\
 Smoke test conseille:
 
 - connexion via auth commune;
-- liste machines;
-- wake d'une machine autorisee;
+- liste machines et etat agent integre;
+- reveil d'une machine autorisee;
+- extinction via Wake sur un agent lie et en ligne;
+- refus ou bouton desactive sans permission, agent en ligne ou liaison;
 - edition machine et composants si gestionnaire;
 - panneau permissions si gestionnaire;
-- panneau Corelink sur une machine liee;
-- bouton `Eteindre` a la place de `Allume` quand la machine est allumee;
-- absence des boutons `Veille`, `Mesurer` et `Redemarrer`.
+- absence d'appel navigateur vers `/corelink/`;
+- absence des actions veille, mesure et redemarrage.
 
 ## Deploiement
 

@@ -147,6 +147,10 @@ export const wakeApi = {
     return request("POST", "wakeDevice", { deviceId });
   },
 
+  async shutdownDevice(deviceId: number): Promise<ApiResult<null>> {
+    return request("POST", "shutdownDevice", { deviceId });
+  },
+
   async createDevice(payload: DevicePayload): Promise<ApiResult<null>> {
     return request("POST", "createDevice", payload);
   },

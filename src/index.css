@@ -580,7 +580,7 @@ legend {
   overflow-wrap: anywhere;
 }
 
-.corelink-panel {
+.agent-panel {
   display: grid;
   gap: 10px;
   padding: 12px;
@@ -589,40 +589,40 @@ legend {
   border-radius: 8px;
 }
 
-.corelink-panel-head {
+.agent-panel-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.corelink-panel-head > div {
+.agent-panel-head > div {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.corelink-panel-head span,
-.corelink-facts span {
+.agent-panel-head span,
+.agent-facts span {
   color: var(--text-muted);
   font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-.corelink-panel-head strong,
-.corelink-facts strong {
+.agent-panel-head strong,
+.agent-facts strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.corelink-facts {
+.agent-facts {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
 }
 
-.corelink-facts div {
+.agent-facts div {
   display: grid;
   gap: 3px;
   min-width: 0;
@@ -632,13 +632,13 @@ legend {
   border-radius: 8px;
 }
 
-.corelink-job-strip {
+.agent-job-strip {
   display: flex;
   gap: 7px;
   flex-wrap: wrap;
 }
 
-.corelink-job-strip span {
+.agent-job-strip span {
   padding: 5px 8px;
   color: var(--blue);
   background: var(--blue-soft);
@@ -844,7 +844,7 @@ legend {
 
   .workspace-layout,
   .device-facts,
-  .corelink-facts,
+  .agent-facts,
   .field-row,
   .user-meta {
     grid-template-columns: 1fr;

@@ -25,7 +25,7 @@ const formatPermissionLabel = (user: WakeAccessUser): string => {
   }
 
   if (user.permission_level === "wake") {
-    return "Reveil";
+    return "Utilisation";
   }
 
   return "Aucun acces";
@@ -146,7 +146,7 @@ export function UserAccessPanel({
                   onChange={(event) => onLevelChange(user.id, event.target.value as WakePermissionLevel)}
                 >
                   <option value="none">Aucun acces</option>
-                  <option value="wake">Reveil uniquement</option>
+                  <option value="wake">Reveil et arret</option>
                   <option value="manage">Gestion complete</option>
                 </select>
               </label>
@@ -180,7 +180,7 @@ export function UserAccessPanel({
             <label>
               <span>Niveau</span>
               <select value={addLevel} onChange={(event) => setAddLevel(event.target.value as WakePermissionLevel)}>
-                <option value="wake">Reveil uniquement</option>
+                <option value="wake">Reveil et arret</option>
                 <option value="manage">Gestion complete</option>
               </select>
             </label>

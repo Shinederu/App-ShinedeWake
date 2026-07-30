@@ -26,16 +26,17 @@ import {
 } from "lucide-react";
 import { LoginPanel } from "@/components/LoginPanel";
 import { UserAccessPanel } from "@/components/UserAccessPanel";
-import { corelinkApi } from "@/lib/corelinkApi";
 import { wakeApi } from "@/lib/api";
-import type { CorelinkJob, CorelinkJobType, CorelinkMachine, CorelinkStatus } from "@/types/corelink";
 import type {
   WakeAccessUser,
+  WakeAgentMetrics,
+  WakeAgentShutdownJob,
   WakeComponentType,
   WakeDevice,
   WakeDeviceComponent,
   WakePermissionLevel,
   WakeStatus,
+  WakeSystemAgent,
 } from "@/types/api";
 
 type DeviceComponentFormState = {
@@ -240,7 +241,7 @@ const normalizeForm = (form: DeviceFormState) => ({
   broadcast_address: form.broadcast_address.trim(),
   port: Number(form.port || 9),
   description: form.description.trim(),
-  corelink_machine_key: normalizeCorelinkKeyInput(form.corelink_machine_key),
+  corelink_machine_key: normalizeAgentKeyInput(form.corelink_machine_key),
   is_enabled: form.is_enabled,
   sort_order: Number(form.sort_order || 0),
   components: form.components
@@ -264,7 +265,7 @@ const formatPowerStateLabel = (state: WakeDevice["power_state"]): string => {
   }
 };
 
-const normalizeCorelinkKeyInput = (value: string): string => {
+const normalizeAgentKeyInput = (value: string): string => {
   return value
     .toLowerCase()
     .trim()
@@ -273,16 +274,16 @@ const normalizeCorelinkKeyInput = (value: string): string => {
     .slice(0, 96);
 };
 
-const formatCorelinkState = (machine: CorelinkMachine | null | undefined): string => {
-  if (!machine) {
+const formatAgentState = (agent: WakeSystemAgent | null | undefined): string => {
+  if (!agent) {
     return "Introuvable";
   }
 
-  if (machine.is_online) {
+  if (agent.is_online) {
     return "Agent en ligne";
   }
 
-  if (machine.status === "stopped") {
+  if (agent.status === "stopped") {
     return "Agent arrete";
   }
 
@@ -297,20 +298,19 @@ const formatMetricPercent = (value: number | null | undefined): string => {
   return `${Math.round(value)}%`;
 };
 
-const formatMemoryUsage = (machine: CorelinkMachine | null | undefined): string => {
-  const metric = machine?.latest_metric;
-  if (!metric?.memory_total_mb) {
+const formatMemoryUsage = (metrics: WakeAgentMetrics | null | undefined): string => {
+  if (!metrics?.memory_total_mb) {
     return "-";
   }
 
-  const usedGb = ((metric.memory_used_mb ?? 0) / 1024).toFixed(1);
-  const totalGb = (metric.memory_total_mb / 1024).toFixed(1);
+  const usedGb = ((metrics.memory_used_mb ?? 0) / 1024).toFixed(1);
+  const totalGb = (metrics.memory_total_mb / 1024).toFixed(1);
 
   return `${usedGb}/${totalGb} Go`;
 };
 
-const formatStorageUsage = (machine: CorelinkMachine | null | undefined): string => {
-  const disks = machine?.latest_metric?.disks ?? [];
+const formatStorageUsage = (metrics: WakeAgentMetrics | null | undefined): string => {
+  const disks = metrics?.disks ?? [];
   const byteDisks = disks
     .map((disk) => {
       const total = disk.total_bytes ?? 0;
@@ -348,19 +348,26 @@ const formatStorageUsage = (machine: CorelinkMachine | null | undefined): string
   return `${Math.round(Math.max(0, Math.min(average, 100)))}%`;
 };
 
-const getCorelinkJobLabel = (job: CorelinkJob): string => {
-  switch (job.job_type) {
-    case "collect_metrics":
-      return "Collecte metriques";
-    case "shutdown":
-      return "Extinction";
-    case "reboot":
-      return "Redemarrage";
-    case "sleep":
-      return "Mise en veille";
-    default:
-      return String(job.job_type);
+const formatGpuUsage = (metrics: WakeAgentMetrics | null | undefined): string => {
+  const usageValues = (metrics?.gpus ?? [])
+    .map((gpu) => gpu.usage_percent ?? gpu.utilization_percent ?? gpu.gpu_usage_percent)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+  if (usageValues.length === 0) {
+    return "-";
   }
+
+  const average = usageValues.reduce((sum, value) => sum + value, 0) / usageValues.length;
+
+  return `${Math.round(Math.max(0, Math.min(average, 100)))}%`;
+};
+
+const formatShutdownJob = (job: WakeAgentShutdownJob): string => {
+  if (job.status === "succeeded") {
+    return "Arret programme";
+  }
+
+  return job.status === "running" ? "Extinction en cours" : "Extinction en attente";
 };
 
 function App() {
@@ -377,10 +384,7 @@ function App() {
   const [users, setUsers] = useState<WakeAccessUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<number | null>(null);
-  const [corelinkStatus, setCorelinkStatus] = useState<CorelinkStatus | null>(null);
-  const [corelinkMachines, setCorelinkMachines] = useState<Record<string, CorelinkMachine | null>>({});
-  const [corelinkJobs, setCorelinkJobs] = useState<Record<string, CorelinkJob[]>>({});
-  const [activeCorelinkJob, setActiveCorelinkJob] = useState<string | null>(null);
+  const [activeShutdownId, setActiveShutdownId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [notice, setNotice] = useState<NoticeState>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -389,8 +393,11 @@ function App() {
   const [componentToAddType, setComponentToAddType] = useState<WakeComponentType>("processor");
   const isLoadingDataRef = useRef(false);
 
-  const canManage = status?.can_manage ?? false;
+  const canManageDevices = status?.can_manage_devices ?? false;
+  const canManageUsers = status?.can_manage_users ?? false;
+  const canManage = canManageDevices || canManageUsers;
   const canWake = status?.can_wake ?? false;
+  const canShutdown = status?.can_shutdown ?? false;
   const isAuthenticated = status?.authenticated ?? false;
 
   const sortedDevices = useMemo(
@@ -414,7 +421,7 @@ function App() {
     ? "Admin global"
     : canManage
       ? "Gestion"
-      : "Reveil";
+      : "Controle";
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
@@ -445,55 +452,6 @@ function App() {
     scrollToEditor();
   };
 
-  const loadCorelinkSnapshot = async (sourceDevices: WakeDevice[], showErrors = false) => {
-    const machineKeys = Array.from(
-      new Set(sourceDevices.map((device) => normalizeCorelinkKeyInput(device.corelink_machine_key)).filter(Boolean))
-    );
-
-    if (machineKeys.length === 0) {
-      setCorelinkStatus(null);
-      setCorelinkMachines({});
-      setCorelinkJobs({});
-      return;
-    }
-
-    const statusResponse = await corelinkApi.getStatus();
-    const nextStatus = statusResponse.data;
-    setCorelinkStatus(nextStatus);
-
-    if (!statusResponse.ok || !nextStatus?.authenticated || !nextStatus.can_view) {
-      setCorelinkMachines({});
-      setCorelinkJobs({});
-      return;
-    }
-
-    const snapshots = await Promise.all(
-      machineKeys.map(async (machineKey) => {
-        const [machineResponse, jobsResponse] = await Promise.all([
-          corelinkApi.getMachine(machineKey),
-          corelinkApi.listActiveJobs(machineKey),
-        ]);
-
-        if (showErrors && !machineResponse.ok && machineResponse.status !== 404) {
-          setNotice({ kind: "error", text: machineResponse.error ?? "Lecture Corelink impossible." });
-        }
-
-        return {
-          machineKey,
-          machine: machineResponse.ok ? machineResponse.data : null,
-          jobs: jobsResponse.ok ? jobsResponse.data ?? [] : [],
-        };
-      })
-    );
-
-    setCorelinkMachines(
-      Object.fromEntries(snapshots.map((snapshot) => [snapshot.machineKey, snapshot.machine]))
-    );
-    setCorelinkJobs(
-      Object.fromEntries(snapshots.map((snapshot) => [snapshot.machineKey, snapshot.jobs]))
-    );
-  };
-
   const loadData = async (showRefreshState = false, showErrors = true, includeUsers = true) => {
     if (isLoadingDataRef.current) {
       return;
@@ -512,14 +470,14 @@ function App() {
         setStatus({
           authenticated: false,
           can_wake: false,
+          can_shutdown: false,
           can_manage: false,
+          can_manage_devices: false,
+          can_manage_users: false,
           is_global_admin: false,
           user: null,
         });
         setDevices([]);
-        setCorelinkStatus(null);
-        setCorelinkMachines({});
-        setCorelinkJobs({});
         if (showErrors && statusResponse.error) {
           setNotice({ kind: "error", text: statusResponse.error });
         }
@@ -528,36 +486,37 @@ function App() {
 
       setStatus(statusResponse.data);
 
-      if (!statusResponse.data.authenticated || !statusResponse.data.can_wake) {
+      if (!statusResponse.data.authenticated) {
         setDevices([]);
-        setCorelinkStatus(null);
-        setCorelinkMachines({});
-        setCorelinkJobs({});
         setUsers([]);
         return;
       }
 
-      const shouldLoadUsers = includeUsers && statusResponse.data.can_manage;
+      const shouldLoadDevices = statusResponse.data.can_wake;
+      const shouldLoadUsers = includeUsers && statusResponse.data.can_manage_users;
       const [devicesResponse, usersResponse] = await Promise.all([
-        wakeApi.listDevices(),
+        shouldLoadDevices ? wakeApi.listDevices() : Promise.resolve(null),
         shouldLoadUsers ? wakeApi.listUsers() : Promise.resolve(null),
       ]);
 
-      if (!devicesResponse.ok || !devicesResponse.data) {
-        setDevices([]);
-        if (showErrors) {
-          setNotice({
-            kind: "error",
-            text: devicesResponse.error ?? "Impossible de charger les machines autorisees.",
-          });
+      if (shouldLoadDevices) {
+        if (!devicesResponse?.ok || !devicesResponse.data) {
+          setDevices([]);
+          if (showErrors) {
+            setNotice({
+              kind: "error",
+              text: devicesResponse?.error ?? "Impossible de charger les machines autorisees.",
+            });
+          }
+          return;
         }
-        return;
+
+        setDevices(devicesResponse.data);
+      } else {
+        setDevices([]);
       }
 
-      setDevices(devicesResponse.data);
-      await loadCorelinkSnapshot(devicesResponse.data, showErrors);
-
-      if (!statusResponse.data.can_manage) {
+      if (!statusResponse.data.can_manage_users) {
         setUsers([]);
         return;
       }
@@ -660,14 +619,14 @@ function App() {
     } finally {
       resetForm();
       setDevices([]);
-      setCorelinkStatus(null);
-      setCorelinkMachines({});
-      setCorelinkJobs({});
       setUsers([]);
       setStatus({
         authenticated: false,
         can_wake: false,
+        can_shutdown: false,
         can_manage: false,
+        can_manage_devices: false,
+        can_manage_users: false,
         is_global_admin: false,
         user: null,
       });
@@ -695,39 +654,25 @@ function App() {
     }
   };
 
-  const handleCorelinkJob = async (device: WakeDevice, jobType: CorelinkJobType) => {
-    const machineKey = normalizeCorelinkKeyInput(device.corelink_machine_key);
-    if (!machineKey) {
+  const handleShutdown = async (device: WakeDevice) => {
+    if (!window.confirm(`Eteindre ${device.name} ?`)) {
       return;
     }
 
-    const confirmLabels: Partial<Record<CorelinkJobType, string>> = {
-      shutdown: `Eteindre ${device.name} via Corelink ?`,
-    };
-
-    const confirmLabel = confirmLabels[jobType];
-    if (confirmLabel && !window.confirm(confirmLabel)) {
-      return;
-    }
-
-    const activeKey = `${device.id}:${jobType}`;
-    setActiveCorelinkJob(activeKey);
+    setActiveShutdownId(device.id);
 
     try {
-      const response = await corelinkApi.createJob({
-        machine_key: machineKey,
-        job_type: jobType,
-      });
+      const response = await wakeApi.shutdownDevice(device.id);
 
       if (!response.ok) {
-        setNotice({ kind: "error", text: response.error ?? "Job Corelink impossible." });
+        setNotice({ kind: "error", text: response.error ?? "Extinction impossible." });
         return;
       }
 
-      setNotice({ kind: "success", text: "Job Corelink ajoute." });
-      await loadCorelinkSnapshot(devices, false);
+      setNotice({ kind: "success", text: "Extinction demandee." });
+      await loadData(false, false, false);
     } finally {
-      setActiveCorelinkJob(null);
+      setActiveShutdownId(null);
     }
   };
 
@@ -862,7 +807,7 @@ function App() {
           <Power size={24} />
         </div>
         <div>
-          <p className="eyebrow">Wake-on-LAN</p>
+          <p className="eyebrow">Gestion des machines</p>
           <h1>ShinedeWake</h1>
         </div>
       </div>
@@ -916,7 +861,7 @@ function App() {
     );
   }
 
-  if (!canWake) {
+  if (!canWake && !canManageUsers) {
     return (
       <main className="app-frame auth-frame">
         {renderShellHeader()}
@@ -948,11 +893,11 @@ function App() {
           <div className="section-head">
             <div>
               <p className="eyebrow">Machines</p>
-              <h2>Parc Wake</h2>
+              <h2>Parc machines</h2>
             </div>
             <div className="section-actions">
               <span className="count-pill">{devices.length} cibles</span>
-              {canManage ? (
+              {canManageDevices ? (
                 <button className="icon-button text-button" type="button" onClick={openCreateForm}>
                   <Plus size={18} />
                   Ajouter une machine
@@ -969,28 +914,28 @@ function App() {
           ) : (
             <div className="device-list">
               {sortedDevices.map((device) => {
-                const isOnline = device.power_state === "online";
-                const corelinkKey = normalizeCorelinkKeyInput(device.corelink_machine_key);
-                const corelinkMachine = corelinkKey ? corelinkMachines[corelinkKey] : null;
-                const linkedCorelinkJobs = corelinkKey ? corelinkJobs[corelinkKey] ?? [] : [];
-                const hasCorelinkAccess = Boolean(corelinkStatus?.authenticated && corelinkStatus.can_view);
-                const canExecuteCorelinkJobs = Boolean(corelinkStatus?.can_execute_jobs);
-                const shutdownActionKey = `${device.id}:shutdown`;
-                const shutdownInProgress = activeCorelinkJob === shutdownActionKey;
-                const canShutdownWithCorelink = Boolean(
-                  corelinkKey &&
-                    hasCorelinkAccess &&
-                    canExecuteCorelinkJobs &&
-                    corelinkMachine?.is_online
+                const agentKey = normalizeAgentKeyInput(device.corelink_machine_key);
+                const agent = device.agent;
+                const metrics = agent?.latest_metrics;
+                const activeShutdownJobs = agent?.active_shutdown_jobs ?? [];
+                const isMachineOnline = Boolean(agent?.is_online || device.power_state === "online");
+                const shutdownInProgress = activeShutdownId === device.id || activeShutdownJobs.length > 0;
+                const canShutdownWithAgent = Boolean(
+                  canShutdown &&
+                    agentKey &&
+                    agent?.is_online &&
+                    activeShutdownJobs.length === 0
                 );
                 const primaryActionDisabled =
                   !device.is_enabled ||
+                  shutdownInProgress ||
                   activeWakeId === device.id ||
-                  (isOnline ? !canShutdownWithCorelink || activeCorelinkJob !== null : false);
-                const primaryActionLabel = isOnline
-                  ? shutdownInProgress
-                    ? "Extinction"
-                    : "Eteindre"
+                  activeShutdownId !== null ||
+                  (isMachineOnline ? !canShutdownWithAgent : false);
+                const primaryActionLabel = shutdownInProgress
+                  ? "Extinction en cours"
+                  : isMachineOnline
+                    ? "Eteindre"
                   : activeWakeId === device.id
                     ? "Envoi"
                     : "Reveiller";
@@ -1054,53 +999,57 @@ function App() {
                         <p className="helper-note">Statut indisponible: {device.power_state_reason}</p>
                       ) : null}
 
-                      {corelinkKey ? (
-                        <div className="corelink-panel">
-                          <div className="corelink-panel-head">
+                      {agentKey ? (
+                        <div className="agent-panel">
+                          <div className="agent-panel-head">
                             <div>
-                              <span>Corelink</span>
-                              <strong>{corelinkMachine?.display_name ?? corelinkKey}</strong>
+                              <span>Agent systeme</span>
+                              <strong>{agent?.display_name ?? agentKey}</strong>
                             </div>
-                            <span className={`state-badge ${corelinkMachine?.is_online ? "state-online" : "state-unknown"}`}>
-                              {hasCorelinkAccess ? formatCorelinkState(corelinkMachine) : "Acces requis"}
+                            <span className={`state-badge ${agent?.is_online ? "state-online" : "state-unknown"}`}>
+                              {formatAgentState(agent)}
                             </span>
                           </div>
 
-                          {hasCorelinkAccess ? (
+                          {agent ? (
                             <>
-                              <div className="corelink-facts">
+                              <div className="agent-facts">
                                 <div>
                                   <span>CPU</span>
-                                  <strong>{formatMetricPercent(corelinkMachine?.latest_metric?.cpu_usage_percent)}</strong>
+                                  <strong>{formatMetricPercent(metrics?.cpu_usage_percent)}</strong>
                                 </div>
                                 <div>
                                   <span>RAM</span>
-                                  <strong>{formatMemoryUsage(corelinkMachine)}</strong>
+                                  <strong>{formatMemoryUsage(metrics)}</strong>
+                                </div>
+                                <div>
+                                  <span>GPU</span>
+                                  <strong>{formatGpuUsage(metrics)}</strong>
                                 </div>
                                 <div>
                                   <span>Stockage</span>
-                                  <strong>{formatStorageUsage(corelinkMachine)}</strong>
+                                  <strong>{formatStorageUsage(metrics)}</strong>
                                 </div>
                                 <div>
                                   <span>Vu</span>
-                                  <strong>{formatDateTime(corelinkMachine?.last_seen_at ?? null)}</strong>
+                                  <strong>{formatDateTime(agent.last_seen_at)}</strong>
                                 </div>
                                 <div>
-                                  <span>Jobs actifs</span>
-                                  <strong>{linkedCorelinkJobs.length}</strong>
+                                  <span>Arrets actifs</span>
+                                  <strong>{activeShutdownJobs.length}</strong>
                                 </div>
                               </div>
 
-                              {linkedCorelinkJobs.length > 0 ? (
-                                <div className="corelink-job-strip">
-                                  {linkedCorelinkJobs.map((job) => (
-                                    <span key={job.id}>{getCorelinkJobLabel(job)}</span>
+                              {activeShutdownJobs.length > 0 ? (
+                                <div className="agent-job-strip">
+                                  {activeShutdownJobs.map((job) => (
+                                    <span key={job.id}>{formatShutdownJob(job)}</span>
                                   ))}
                                 </div>
                               ) : null}
                             </>
                           ) : (
-                            <p className="helper-note">La machine est liee, mais ce compte n'a pas acces a Corelink.</p>
+                            <p className="helper-note">Aucun agent ne correspond encore a cette cle de liaison.</p>
                           )}
                         </div>
                       ) : null}
@@ -1108,16 +1057,18 @@ function App() {
 
                     <div className="device-actions">
                       <button
-                        className={`icon-button ${isOnline ? "danger-button" : "primary-button"}`}
+                        className={`icon-button ${isMachineOnline ? "danger-button" : "primary-button"}`}
                         disabled={primaryActionDisabled}
                         title={
-                          isOnline && !canShutdownWithCorelink && !shutdownInProgress
-                            ? "Corelink doit etre en ligne avec les droits jobs pour eteindre cette machine."
+                          isMachineOnline && !canShutdownWithAgent && !shutdownInProgress
+                            ? canShutdown
+                              ? "L'agent systeme doit etre en ligne pour eteindre cette machine."
+                              : "Ce compte n'a pas le droit d'eteindre les machines."
                             : undefined
                         }
                         onClick={() => {
-                          if (isOnline) {
-                            void handleCorelinkJob(device, "shutdown");
+                          if (isMachineOnline) {
+                            void handleShutdown(device);
                             return;
                           }
 
@@ -1128,7 +1079,7 @@ function App() {
                         {primaryActionLabel}
                       </button>
 
-                      {canManage ? (
+                      {canManageDevices ? (
                         <>
                           <button
                             className="icon-button text-button"
@@ -1147,7 +1098,7 @@ function App() {
           )}
         </section>
 
-        {canManage && isEditorOpen ? (
+        {canManageDevices && isEditorOpen ? (
           <aside id="device-editor" className="surface editor-surface">
             <div className="section-head">
               <div>
@@ -1184,17 +1135,17 @@ function App() {
               </fieldset>
 
               <fieldset>
-                <legend>Corelink</legend>
+                <legend>Agent systeme</legend>
                 <label>
-                  <span>Cle machine Corelink</span>
+                  <span>Cle de liaison agent</span>
                   <input
                     type="text"
-                    placeholder="gooba"
+                    placeholder="bootao"
                     value={form.corelink_machine_key}
                     onChange={(event) =>
                       setForm((current) => ({
                         ...current,
-                        corelink_machine_key: normalizeCorelinkKeyInput(event.target.value),
+                        corelink_machine_key: normalizeAgentKeyInput(event.target.value),
                       }))
                     }
                   />
@@ -1388,7 +1339,7 @@ function App() {
         ) : null}
       </section>
 
-      {canManage ? (
+      {canManageUsers ? (
         <section className="surface users-surface">
           <UserAccessPanel
             users={users}

@@ -11,11 +11,72 @@ export type WakeDevice = {
   sort_order: number;
   last_wake_at: string | null;
   components: WakeDeviceComponent[];
+  agent: WakeSystemAgent | null;
   power_state: "online" | "offline" | "unknown";
   power_state_label?: string;
   power_state_reason: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type WakeAgentDisk = {
+  name?: string;
+  mount_point?: string;
+  total_bytes?: number;
+  used_bytes?: number;
+  free_bytes?: number;
+  used_percent?: number;
+};
+
+export type WakeAgentGpu = {
+  name?: string;
+  usage_percent?: number;
+  utilization_percent?: number;
+  gpu_usage_percent?: number;
+  memory_used_mb?: number;
+  memory_total_mb?: number;
+  temperature_c?: number;
+};
+
+export type WakeAgentMetrics = {
+  captured_at: string;
+  cpu_usage_percent: number | null;
+  memory_used_mb: number | null;
+  memory_total_mb: number | null;
+  disks: WakeAgentDisk[];
+  gpus: WakeAgentGpu[];
+  uptime_seconds: number | null;
+  payload: Record<string, unknown>;
+};
+
+export type WakeAgentShutdownJob = {
+  id: number;
+  machine_id: number;
+  job_type: "shutdown";
+  status: "queued" | "running" | string;
+  trace_id: string;
+  not_before_at: string | null;
+  picked_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WakeSystemAgent = {
+  id: number;
+  machine_key: string;
+  display_name: string;
+  hostname: string;
+  platform: string;
+  os_version: string;
+  agent_version: string;
+  status: string;
+  is_online: boolean;
+  last_seen_at: string | null;
+  last_ip: string;
+  is_enabled: boolean;
+  latest_metrics: WakeAgentMetrics | null;
+  active_shutdown_jobs: WakeAgentShutdownJob[];
 };
 
 export type WakeComponentType =
@@ -78,7 +139,10 @@ export type WakeUser = {
 export type WakeStatus = {
   authenticated: boolean;
   can_wake: boolean;
+  can_shutdown: boolean;
   can_manage: boolean;
+  can_manage_devices: boolean;
+  can_manage_users: boolean;
   is_global_admin: boolean;
   user: WakeUser | null;
 };
