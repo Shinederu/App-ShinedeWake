@@ -17,6 +17,11 @@ ShinedeWake permet aux utilisateurs autorises de:
 - maintenir les machines, leurs composants et les acces Wake avec les droits de
   gestion.
 
+Le panneau d'etat de l'agent systeme et ses metriques n'est affiche que lorsque
+l'etat de puissance Wake de la machine vaut `online`. Le stockage courant est
+presente sous la forme `utilise / total`, en Go sous 1 To et en To a partir de
+1 To.
+
 Le navigateur appelle uniquement l'API Wake pour les fonctions machine. Il ne
 fait jamais de Wake-on-LAN directement, ne se connecte pas a MySQL et n'appelle
 plus l'API Corelink. L'API Wake agrege les informations techniques necessaires.

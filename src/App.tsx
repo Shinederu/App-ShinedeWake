@@ -318,7 +318,13 @@ const formatStorageUsage = (metrics: WakeAgentMetrics | null | undefined): strin
         return null;
       }
 
-      const used = disk.used_bytes ?? (disk.free_bytes !== undefined ? total - disk.free_bytes : null);
+      const used =
+        disk.used_bytes ??
+        (disk.free_bytes !== undefined
+          ? total - disk.free_bytes
+          : typeof disk.used_percent === "number" && Number.isFinite(disk.used_percent)
+            ? total * (disk.used_percent / 100)
+            : null);
       if (used === null || !Number.isFinite(used)) {
         return null;
       }
@@ -333,19 +339,17 @@ const formatStorageUsage = (metrics: WakeAgentMetrics | null | undefined): strin
   if (byteDisks.length > 0) {
     const total = byteDisks.reduce((sum, disk) => sum + disk.total, 0);
     const used = byteDisks.reduce((sum, disk) => sum + disk.used, 0);
-    return `${Math.round((used / total) * 100)}%`;
+    const useTerabytes = total >= 1_000_000_000_000;
+    const divisor = useTerabytes ? 1_000_000_000_000 : 1_000_000_000;
+    const unit = useTerabytes ? "To" : "Go";
+    const formatter = new Intl.NumberFormat("fr-CH", {
+      maximumFractionDigits: useTerabytes ? 2 : 0,
+    });
+
+    return `${formatter.format(used / divisor)} ${unit} / ${formatter.format(total / divisor)} ${unit}`;
   }
 
-  const percents = disks
-    .map((disk) => disk.used_percent)
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-
-  if (percents.length === 0) {
-    return "-";
-  }
-
-  const average = percents.reduce((sum, value) => sum + value, 0) / percents.length;
-  return `${Math.round(Math.max(0, Math.min(average, 100)))}%`;
+  return "-";
 };
 
 const formatGpuUsage = (metrics: WakeAgentMetrics | null | undefined): string => {
@@ -999,7 +1003,7 @@ function App() {
                         <p className="helper-note">Statut indisponible: {device.power_state_reason}</p>
                       ) : null}
 
-                      {agentKey ? (
+                      {device.power_state === "online" && agentKey ? (
                         <div className="agent-panel">
                           <div className="agent-panel-head">
                             <div>
