@@ -3,7 +3,7 @@
 Frontend React/Vite du panel Wake. Il constitue l'interface unique pour
 reveiller une machine, consulter son agent systeme et demander son extinction.
 
-Documentation mise a jour le 2026-07-30.
+Documentation mise a jour le 2026-08-11.
 
 ## Role
 
@@ -20,6 +20,18 @@ ShinedeWake permet aux utilisateurs autorises de:
 Le navigateur appelle uniquement l'API Wake pour les fonctions machine. Il ne
 fait jamais de Wake-on-LAN directement, ne se connecte pas a MySQL et n'appelle
 plus l'API Corelink. L'API Wake agrege les informations techniques necessaires.
+
+## Statut et non-objectifs
+
+ShinedeWake est maintenu a la demande. Son perimetre produit reste volontairement
+limite au Wake-on-LAN, a l'etat et aux metriques courantes, a l'arret controle,
+ainsi qu'a la gestion necessaire des machines et acces.
+
+ShinedeWake n'est pas une plateforme de supervision ou de prise en main distante.
+Sont hors perimetre sans decision explicite: historique et analytique des
+metriques, alerting, terminal distant, scripts, gestion de processus ou services,
+redemarrage, veille, hibernation et toute commande machine libre. Une nouvelle
+action exige un besoin concret et une revue conjointe des contrats Wake/Corelink.
 
 ## Repo et deploiement
 

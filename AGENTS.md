@@ -5,7 +5,7 @@ unique pour le reveil, l'observation de l'agent systeme et l'arret controle des
 machines. Le projet doit rester deployable dans `P:\PROD\ShinedeWake` uniquement
 sous forme d'artefacts `dist\`.
 
-Documentation mise a jour le 2026-07-30.
+Documentation mise a jour le 2026-08-11.
 
 ## Lecture de demarrage
 
@@ -28,6 +28,15 @@ Documentation mise a jour le 2026-07-30.
 - Ne pas modifier Corelink, Auth ou les modules partages depuis ce depot sans
   demande explicite.
 - Arcadia est archive et ne fait plus partie du contrat Wake.
+
+## Garde-fous produit
+
+ShinedeWake est maintenu a la demande. Garder le produit limite au reveil, a
+l'etat et aux metriques courantes, a l'arret controle, et a la gestion requise
+des machines/acces. Ne pas en faire une plateforme RMM: aucun historique ou
+analytique de metriques, alerting, terminal, scripts, controle de processus ou
+services, redemarrage, veille, hibernation ou commande libre sans decision
+explicite fondee sur un besoin concret.
 
 ## Source de verite
 
