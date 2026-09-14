@@ -61,7 +61,7 @@ Modifier en DEV, builder, commit/push, puis deployer `dist\` si necessaire.
 - `src\types\api.ts`: contrat Wake, y compris `device.agent`.
 - `src\components\LoginPanel.tsx`: connexion hors session.
 - `src\index.css`: tuiles plein ecran, modale et responsive.
-- `public\manifest.webmanifest`: contrat d'installation PWA.
+- `public\manifest.json`: contrat d'installation PWA.
 - `public\sw.js`: cache du shell statique uniquement.
 - `public\icons\`: icones PWA, maskable et Apple.
 - `dist\`: build Vite, a ne pas modifier a la main.

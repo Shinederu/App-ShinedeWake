@@ -1,6 +1,6 @@
-const CACHE_NAME = "shinedewake-shell-v2";
+const CACHE_NAME = "shinedewake-shell-v3";
 const STATIC_SHELL = [
-  "/manifest.webmanifest",
+  "/manifest.json",
   "/favicon.png",
   "/icons/apple-touch-icon.png",
   "/icons/pwa-192x192.png",

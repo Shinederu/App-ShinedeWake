@@ -42,7 +42,7 @@ Le deploiement copie uniquement le contenu genere de `dist\` vers
 - `src\lib\authClient.ts`: client auth commun.
 - `src\types\api.ts`: contrats de l'API Wake.
 - `src\components\LoginPanel.tsx`: connexion lorsque la session est absente.
-- `public\manifest.webmanifest`: manifeste installable.
+- `public\manifest.json`: manifeste installable.
 - `public\sw.js`: cache du shell statique uniquement.
 - `public\icons\`: icones PWA, maskable et Apple.
 - `dist\`: artefacts Vite deployables.
