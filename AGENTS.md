@@ -1,11 +1,11 @@
 # Guide Agents - ShinedeWake
 
-Ce depot contient le frontend React/Vite du panel Wake. Wake est l'interface
-unique pour le reveil, l'observation de l'agent systeme et l'arret controle des
-machines. Le projet doit rester deployable dans `P:\PROD\ShinedeWake` uniquement
-sous forme d'artefacts `dist\`.
+Ce depot contient la PWA React/Vite minimaliste de Wake. L'ecran operationnel
+affiche uniquement une grande tuile par machine active pour le reveil et l'arret
+controle. Le projet doit rester deployable dans `P:\PROD\ShinedeWake`
+uniquement sous forme d'artefacts `dist\`.
 
-Documentation mise a jour le 2026-08-11.
+Documentation mise a jour le 2026-09-14.
 
 ## Lecture de demarrage
 
@@ -55,14 +55,20 @@ Modifier en DEV, builder, commit/push, puis deployer `dist\` si necessaire.
 
 ## Structure utile
 
-- `src\App.tsx`: logique d'application et UI principale.
+- `src\App.tsx`: auth, liste, transitions et modale d'extinction.
 - `src\lib\api.ts`: client Wake unique pour les appareils et actions machine.
 - `src\lib\authClient.ts`: client auth commun.
 - `src\types\api.ts`: contrat Wake, y compris `device.agent`.
-- `src\components\`: composants React.
-- `src\index.css`: styles.
-- `public\`: assets publics.
+- `src\components\LoginPanel.tsx`: connexion hors session.
+- `src\index.css`: tuiles plein ecran, modale et responsive.
+- `public\manifest.webmanifest`: contrat d'installation PWA.
+- `public\sw.js`: cache du shell statique uniquement.
+- `public\icons\`: icones PWA, maskable et Apple.
 - `dist\`: build Vite, a ne pas modifier a la main.
+
+Incrementer `shinedewake-shell-vN` dans `public\sw.js` lorsque le worker, le
+manifeste ou une icone change. Les caches d'autres applications partageant
+l'origine ne doivent jamais etre supprimes.
 
 ## Auth et permissions
 
@@ -78,28 +84,25 @@ Modifier en DEV, builder, commit/push, puis deployer `dist\` si necessaire.
   - `wake.users.manage`
 - Aucune connexion DB cote frontend.
 
-## Agent systeme
+## Etats et agent systeme
 
-La liaison technique reste stockee dans `corelink_machine_key` pour compatibilite
-DB, mais l'interface emploie les termes `Agent systeme` et `Cle de liaison
-agent`.
+- Rouge uniquement pour `device.power_state=offline`.
+- Vert uniquement pour `device.power_state=online`.
+- Gris pour `device.power_state=unknown`; ne pas deviner l'etat.
+- Orange pendant un reveil ou un arret en cours.
 
-`listDevices` fournit directement `device.agent`, avec:
+La couleur ne doit jamais etre calculee depuis `device.agent.is_online`.
+Corelink reste une precondition de l'arret: permission
+`wake.devices.shutdown`, cle de liaison, agent en ligne et aucun job actif.
+L'ecran ne montre plus les metriques ou details de l'agent.
 
-- etat et derniere presence;
-- dernieres metriques CPU, RAM, GPU, disques et uptime;
-- jobs d'arret actifs.
-
-Le bouton d'arret utilise uniquement `POST ?action=shutdownDevice`. Il doit etre
-actif seulement si l'utilisateur possede `wake.devices.shutdown`, si l'agent
-lie est en ligne et si aucun arret n'est deja actif. Ne pas reintegrer un client
-Corelink separe ni les actions veille, redemarrage ou mesure sans demande
-explicite.
+Une transition locale est conservee au plus 120 secondes dans `localStorage`.
+Elle sert uniquement a l'affichage et ne doit jamais rejouer une commande.
 
 ## Temps reel
 
-- Rafraichissement HTTP silencieux toutes les 15 secondes quand l'onglet est
-  visible.
+- Rafraichissement HTTP silencieux toutes les 15 secondes en etat stable et
+  toutes les 3 secondes pendant une transition, quand l'onglet est visible.
 - L'API Wake publie des evenements Mercure `wake.device.*`, mais ce frontend ne
   s'y abonne pas encore.
 - Toute future integration Mercure doit garder une resynchronisation HTTP via
@@ -110,6 +113,7 @@ explicite.
 ```powershell
 cd P:\DEV\GitHub\App-ShinedeWake
 npm run build
+node --check public\sw.js
 git -c safe.directory=* diff --check
 rg -n "password|passwd|secret|BEGIN (RSA|OPENSSH|PRIVATE)|api_key|token" P:\DEV\GitHub\App-ShinedeWake
 ```
@@ -117,14 +121,15 @@ rg -n "password|passwd|secret|BEGIN (RSA|OPENSSH|PRIVATE)|api_key|token" P:\DEV\
 Smoke test conseille:
 
 - connexion via auth commune;
-- liste machines et etat agent integre;
-- reveil d'une machine autorisee;
-- extinction via Wake sur un agent lie et en ligne;
-- refus ou bouton desactive sans permission, agent en ligne ou liaison;
-- edition machine et composants si gestionnaire;
-- panneau permissions si gestionnaire;
+- tuiles rouge `offline`, verte `online`, grise `unknown`;
+- reveil rouge -> orange -> vert;
+- modale verte avec focus initial sur `Non` et annulation sans requete;
+- extinction confirmee verte -> orange -> rouge;
+- refus sans permission, agent en ligne ou liaison;
 - absence d'appel navigateur vers `/corelink/`;
-- absence des actions veille, mesure et redemarrage.
+- absence des actions veille, mesure et redemarrage;
+- PWA installable avec icones 192/512;
+- aucun cache API, Background Sync ou rejeu differe.
 
 ## Deploiement
 

@@ -51,7 +51,7 @@ export const LoginPanel = ({ isBusy, error, onSubmit }: LoginPanelProps) => {
         </button>
       </form>
 
-      {error ? <p className="notice error">{error}</p> : null}
+      {error ? <p className="notice error" role="alert">{error}</p> : null}
     </section>
   );
 };

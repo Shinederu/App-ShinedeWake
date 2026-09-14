@@ -1,241 +1,190 @@
 # ShinedeWake
 
-Frontend React/Vite du panel Wake. Il constitue l'interface unique pour
-reveiller une machine, consulter son agent systeme et demander son extinction.
+PWA React/Vite minimaliste pour allumer et eteindre les machines autorisees.
 
-Documentation mise a jour le 2026-08-11.
+Documentation mise a jour le 2026-09-14.
 
 ## Role
 
-ShinedeWake permet aux utilisateurs autorises de:
+L'ecran authentifie affiche uniquement un fond et une grande tuile par machine
+active:
 
-- consulter les machines et leur etat de puissance estime;
-- envoyer une commande Wake-on-LAN;
-- visualiser l'etat de l'agent systeme et ses dernieres metriques CPU, RAM, GPU,
-  disques et uptime;
-- demander un arret controle quand l'agent lie est disponible;
-- maintenir les machines, leurs composants et les acces Wake avec les droits de
-  gestion.
+- rouge: machine `offline`, un appui envoie le Wake-on-LAN;
+- vert: machine `online`, un appui ouvre la confirmation d'extinction;
+- orange: demarrage ou extinction en attente;
+- gris: etat `unknown`, aucune action n'est envoyee.
 
-Le panneau d'etat de l'agent systeme et ses metriques n'est affiche que lorsque
-l'etat de puissance Wake de la machine vaut `online`. Le stockage courant est
-presente sous la forme `utilise / total`, en Go sous 1 To et en To a partir de
-1 To.
+La couleur se base strictement sur `device.power_state`. L'etat Corelink ne
+decide jamais si une machine apparait allumee; `device.agent.is_online` reste
+uniquement une precondition de securite avant de proposer l'extinction.
 
-Le navigateur appelle uniquement l'API Wake pour les fonctions machine. Il ne
-fait jamais de Wake-on-LAN directement, ne se connecte pas a MySQL et n'appelle
-plus l'API Corelink. L'API Wake agrege les informations techniques necessaires.
-
-## Statut et non-objectifs
-
-ShinedeWake est maintenu a la demande. Son perimetre produit reste volontairement
-limite au Wake-on-LAN, a l'etat et aux metriques courantes, a l'arret controle,
-ainsi qu'a la gestion necessaire des machines et acces.
-
-ShinedeWake n'est pas une plateforme de supervision ou de prise en main distante.
-Sont hors perimetre sans decision explicite: historique et analytique des
-metriques, alerting, terminal distant, scripts, gestion de processus ou services,
-redemarrage, veille, hibernation et toute commande machine libre. Une nouvelle
-action exige un besoin concret et une revue conjointe des contrats Wake/Corelink.
+Les metriques, composants, IP, MAC et panneaux de gestion ne sont plus affiches
+dans cette telecommande. Les appareils desactives sont masques.
 
 ## Repo et deploiement
 
 - Source DEV: `P:\DEV\GitHub\App-ShinedeWake`
 - Runtime PROD: `P:\PROD\ShinedeWake`
-- URL publique attendue: `https://wake.shinederu.ch`
+- URL publique: `https://wake.shinederu.ch`
 - API Wake: `https://api.shinederu.ch/wake/`
 - API Auth: `https://api.shinederu.ch/auth/`
 - Backend source: `P:\DEV\GitHub\App-ShinedeWake-API`
 - Branche normale: `main`
 
-Le deploiement frontend copie uniquement le contenu de `dist\` vers
+Le deploiement copie uniquement le contenu genere de `dist\` vers
 `P:\PROD\ShinedeWake`.
 
 ## Structure
 
-- `src\App.tsx`: application principale, appareils, agent systeme et actions.
-- `src\lib\api.ts`: client HTTP Wake unique pour les fonctions machine.
+- `src\App.tsx`: authentification, rafraichissement et telecommande machines.
+- `src\index.css`: interface plein ecran, tuiles et modale responsive.
+- `src\lib\api.ts`: client HTTP Wake.
 - `src\lib\authClient.ts`: client auth commun.
-- `src\types\api.ts`: contrats de l'API Wake, dont `WakeSystemAgent`.
-- `src\components\LoginPanel.tsx`: panneau de connexion.
-- `src\components\UserAccessPanel.tsx`: gestion des acces Wake.
-- `src\index.css`: styles de l'application.
-- `public\`: assets publics inclus au build.
-- `dist\`: artefacts generes par Vite, seuls fichiers deployables en PROD.
+- `src\types\api.ts`: contrats de l'API Wake.
+- `src\components\LoginPanel.tsx`: connexion lorsque la session est absente.
+- `public\manifest.webmanifest`: manifeste installable.
+- `public\sw.js`: cache du shell statique uniquement.
+- `public\icons\`: icones PWA, maskable et Apple.
+- `dist\`: artefacts Vite deployables.
 
-Les anciens fichiers `src\lib\corelinkApi.ts` et `src\types\corelink.ts` ont ete
-retires: un client Corelink separe recreerait deux autorites dans l'interface.
+Les anciens helpers de gestion restent dans le client/types pour compatibilite,
+mais l'ecran minimal ne les appelle plus.
 
 ## Endpoints consommes
-
-Wake:
 
 - `GET https://api.shinederu.ch/wake/?action=status`
 - `GET https://api.shinederu.ch/wake/?action=listDevices`
 - `POST https://api.shinederu.ch/wake/?action=wakeDevice`
 - `POST https://api.shinederu.ch/wake/?action=shutdownDevice`
-- `POST https://api.shinederu.ch/wake/?action=createDevice`
-- `PUT https://api.shinederu.ch/wake/?action=updateDevice`
-- `DELETE https://api.shinederu.ch/wake/?action=deleteDevice`
-- `GET https://api.shinederu.ch/wake/?action=listUsers`
-- `PUT https://api.shinederu.ch/wake/?action=updateUserPermissions`
 
-Auth est consomme indirectement par `@shinederu/auth-core` via
-`VITE_SHINEDERU_API_AUTH_URL`.
+Toutes les requetes utilisent `credentials: include` pour le cookie `sid`. Le
+navigateur n'appelle jamais directement `/corelink/`.
 
-Toutes les requetes navigateur utilisent `credentials: include` pour transmettre
-le cookie de session `sid`.
+## Etats et transitions
 
-## Contrat appareil et agent systeme
+### Reveil
 
-`listDevices` fournit les champs Wake historiques, puis un champ `agent`:
+Un appui sur une tuile rouge:
 
-```json
-{
-  "id": 1,
-  "name": "BooTao",
-  "corelink_machine_key": "bootao",
-  "power_state": "online",
-  "agent": {
-    "machine_key": "bootao",
-    "display_name": "BooTao",
-    "status": "online",
-    "is_online": true,
-    "last_seen_at": "2026-07-30 12:00:00",
-    "latest_metrics": {
-      "captured_at": "2026-07-30 12:00:00",
-      "cpu_usage_percent": 18.2,
-      "memory_used_mb": 8192,
-      "memory_total_mb": 32768,
-      "disks": [],
-      "gpus": [],
-      "uptime_seconds": 86400
-    },
-    "active_shutdown_jobs": []
-  }
-}
+1. passe immediatement la tuile en orange;
+2. envoie une seule requete `wakeDevice`;
+3. rafraichit toutes les 3 secondes;
+4. passe en vert uniquement lorsque l'API retourne `power_state=online`.
+
+L'attente est conservee dans `localStorage` pour survivre a une relance courte de
+la PWA. Elle expire apres 120 secondes sans nouvel envoi automatique.
+
+### Extinction
+
+Un appui sur une tuile verte ouvre une modale accessible:
+
+```text
+Eteindre <machine> ?
+Etes-vous sur de vouloir eteindre cet ordinateur ?
+Non | Oui, eteindre
 ```
 
-`agent` vaut `null` si aucune machine technique ne correspond a la cle. Les
-metriques peuvent aussi etre `null` pendant le premier deploiement ou avant la
-premiere collecte.
+Le focus initial est place sur `Non`; Echap et le clic sur le fond annulent. La
+requete `shutdownDevice` n'est envoyee qu'apres `Oui, eteindre`, avec permission
+`wake.devices.shutdown`, liaison agent et agent en ligne. La tuile reste orange
+jusqu'au retour `power_state=offline`.
 
-Le champ de stockage `corelink_machine_key` est conserve pour compatibilite. Son
-libelle produit est `Cle de liaison agent`; les panneaux visibles utilisent
-`Agent systeme`.
+Les jobs d'extinction actifs fournis par l'API rendent aussi la tuile orange et
+empechent les doublons.
 
 ## Authentification et permissions
 
 - Auth commune via `Module-Auth-Core` et `Module-Auth-React`.
-- Cookie session attendu: `sid` sur `.shinederu.ch`.
-- Le backend Wake reste l'autorite d'acces.
-- Les comptes bannis sont refuses cote API si `users.is_banned` existe.
+- Cookie attendu: `sid` sur `.shinederu.ch`.
+- `wake.devices.wake`: acces a la liste et reveil.
+- `wake.devices.shutdown`: extinction via l'agent lie.
+- Le backend reste l'autorite finale pour chaque commande.
 
-Permissions Wake:
-
-- `wake.devices.wake`: acces au panel et envoi WOL.
-- `wake.devices.shutdown`: demande d'arret via l'agent lie.
-- `wake.devices.manage`: creation, edition et suppression des machines.
-- `wake.users.manage`: gestion des acces utilisateurs.
-
-Le statut expose `can_wake`, `can_shutdown`, `can_manage_devices`,
-`can_manage_users` et le resume compatible `can_manage`. Le bouton d'arret
-reste desactive sans permission, sans agent en ligne, lorsqu'un job d'arret est
-actif ou pendant le court delai d'arret deja programme. Le role projet `wake`
-represente dans l'UI l'utilisation normale (reveil et arret); le role `manage`
-ajoute la gestion.
+Sans session, le formulaire de connexion est affiche. Sans droit Wake, l'ecran
+affiche un refus d'acces. Une deconnexion discrete reste disponible en haut a
+droite.
 
 ## Base de donnees
 
-Le frontend n'accede jamais a MySQL.
+Le frontend n'accede jamais a MySQL. Les tables et migrations appartiennent a
+`App-ShinedeWake-API`; le frontend ne connait que son contrat JSON.
 
-Les tables et migrations sont documentees dans
-`P:\DEV\GitHub\App-ShinedeWake-API\README.md`. Le frontend connait uniquement la
-liaison `corelink_machine_key` et le contrat JSON `device.agent`.
+## PWA et fonctionnement hors ligne
 
-## Temps reel et evenements
+Le manifeste declare:
 
-Le frontend ne s'abonne pas encore a Mercure.
+- `start_url` et `scope` a `/`;
+- affichage `standalone`;
+- icones PNG 192 x 192 et 512 x 512;
+- icone maskable 512 x 512;
+- couleurs de lancement alignees sur le fond de l'application.
 
-Etat actuel:
+Le service worker met uniquement en cache le shell HTML/CSS/JS et les icones.
+Les appels a `api.shinederu.ch`, l'authentification, l'etat des machines et les
+POST Wake/extinction restent strictement reseau. Il n'existe ni cache API, ni
+Background Sync, ni rejeu differe d'une commande.
 
-- rafraichissement HTTP silencieux toutes les 15 secondes quand l'onglet est
-  visible;
-- resynchronisation unique via `status` et `listDevices`;
-- publication Mercure cote API apres un reveil ou une demande d'arret.
+Lors d'une modification du service worker, du manifeste ou des icones, incrementer
+la version `shinedewake-shell-vN` dans `public\sw.js`. Les bundles Vite hashes sont
+eux actualises et nettoyes a chaque navigation reussie.
 
-Evenements publies par l'API Wake:
+## Temps reel
 
-- `wake.device.wake_requested`
-- `wake.device.wake_succeeded`
-- `wake.device.wake_failed`
-- `wake.device.shutdown_requested`
+Le frontend utilise une resynchronisation HTTP:
 
-Topics:
+- toutes les 15 secondes en etat stable;
+- toutes les 3 secondes pendant une transition;
+- uniquement lorsque l'onglet est visible;
+- immediatement au retour de visibilite.
 
-- `https://api.shinederu.ch/wake/topics/devices`
-- `https://api.shinederu.ch/wake/topics/devices/{DEVICE_ID}`
-
-Mercure ne doit jamais servir a declencher une commande critique.
+L'API publie des evenements Mercure, mais cette PWA ne s'y abonne pas. Toute
+future integration doit conserver la resynchronisation HTTP.
 
 ## Dependances inter-projets
 
-- `App-ShinedeWake-API`: autorite des appareils, permissions, WOL, arret et
-  contrat d'agent systeme.
-- `Module-Auth-API`: session `sid`, utilisateurs et authentification commune.
+- `App-ShinedeWake-API`: statut, appareils, WOL et extinction.
+- `Module-Auth-API`: session et utilisateurs.
 - `Module-Auth-Core`: client auth TypeScript.
-- `Module-Auth-React`: bindings React pour le contexte auth.
-- `App-Corelink-API`: agent et collecteur technique cote serveur; aucune
-  dependance navigateur directe.
+- `Module-Auth-React`: contexte React d'authentification.
+- `App-Corelink-API`: passerelle agent cote serveur, jamais appelee directement.
 
-Le build utilise des alias Vite vers:
-
-- `P:\DEV\GitHub\Module-Auth-Core\src`
-- `P:\DEV\GitHub\Module-Auth-React\src`
+Le build utilise des alias Vite vers les sources locales `Module-Auth-Core` et
+`Module-Auth-React`.
 
 ## Configuration
 
-Fichiers publics suivis:
-
-- `.env.example`
-- `.env.development`
-- `.env.production`
-
-Variables Vite:
+Variables Vite publiques:
 
 - `VITE_SHINEDERU_API_AUTH_URL`
 - `VITE_SHINEDEWAKE_API_URL`
 
-Valeurs attendues en production:
+Valeurs de production:
 
 ```text
 VITE_SHINEDERU_API_AUTH_URL=https://api.shinederu.ch/auth/
 VITE_SHINEDEWAKE_API_URL=https://api.shinederu.ch/wake/
 ```
 
-Ces valeurs sont publiques. Ne jamais ajouter de token, mot de passe ou secret
-dans un `.env` frontend.
+Ne jamais ajouter de token, mot de passe ou secret dans un `.env` frontend.
 
 ## Verifications
 
 ```powershell
 cd P:\DEV\GitHub\App-ShinedeWake
 npm run build
+node --check public\sw.js
 git -c safe.directory=* diff --check
-rg -n "password|passwd|secret|BEGIN (RSA|OPENSSH|PRIVATE)|api_key|token" P:\DEV\GitHub\App-ShinedeWake
 ```
 
-Smoke test manuel apres deploiement:
+Smoke test:
 
-1. ouvrir `https://wake.shinederu.ch`;
-2. verifier la connexion et les flags `status`;
-3. verifier la liste et le panneau `Agent systeme`;
-4. reveiller une machine autorisee;
-5. demander l'arret d'une machine liee et en ligne;
-6. verifier que l'arret devient indisponible pendant le job actif;
-7. verifier l'editeur et les permissions avec un compte gestionnaire;
-8. verifier l'absence de requete navigateur vers `/corelink/`;
-9. verifier l'absence des actions veille, mesure et redemarrage.
+1. verifier la connexion commune;
+2. verifier rouge pour `offline`, vert pour `online`, gris pour `unknown`;
+3. verifier le passage immediat rouge vers orange puis orange vers vert;
+4. verifier que le vert ouvre la modale et que `Non` n'envoie rien;
+5. confirmer une extinction autorisee puis verifier orange vers rouge;
+6. verifier les refus sans permission ou agent en ligne;
+7. verifier l'installation PWA et l'absence de cache/rejeu API.
 
 ## Deploiement
 
@@ -246,13 +195,11 @@ npm run build
 
 Copier uniquement le contenu de `dist\` vers `P:\PROD\ShinedeWake`. Ne pas
 deployer `.git`, les sources, `.env*`, `node_modules`, docs, tests ou caches.
-Avant de supprimer d'anciens assets, verifier que le nouvel `index.html` ne les
-reference plus.
+Avant de supprimer d'anciens assets hashes, verifier que le nouvel `index.html`
+ne les reference plus.
 
 ## Notes de reprise
 
-- Etat documente le 2026-07-30.
-- Wake est le produit et l'API navigateur uniques.
-- Arcadia ne fait plus partie du contrat.
-- La migration d'acces et de liaison agent se trouve dans
-  `App-ShinedeWake-API\sql\005_wake_shutdown_permission_and_agent_link.sql`.
+- Interface PWA minimaliste depuis le 2026-09-14.
+- Wake reste l'unique API navigateur et Corelink reste strictement technique.
+- Aucune capacite API, DB ou agent n'a ete ajoutee pour cette refonte.
