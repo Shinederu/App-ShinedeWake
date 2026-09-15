@@ -3,7 +3,7 @@
 Frontend React/Vite du panel Wake. Il constitue l'interface unique pour
 reveiller une machine, consulter son agent systeme et demander son extinction.
 
-Documentation mise a jour le 2026-08-11.
+Documentation mise a jour le 2026-09-15.
 
 ## Role
 
@@ -16,6 +16,11 @@ ShinedeWake permet aux utilisateurs autorises de:
 - demander un arret controle quand l'agent lie est disponible;
 - maintenir les machines, leurs composants et les acces Wake avec les droits de
   gestion.
+
+Deux surfaces coexistent sans redirection automatique:
+
+- `/`: panel complet historique, adapte au poste de travail;
+- `/mobile/`: PWA volontairement minimale avec une tuile d'action par machine.
 
 Le panneau d'etat de l'agent systeme et ses metriques n'est affiche que lorsque
 l'etat de puissance Wake de la machine vaut `online`. Le stockage courant est
@@ -43,6 +48,7 @@ action exige un besoin concret et une revue conjointe des contrats Wake/Corelink
 - Source DEV: `P:\DEV\GitHub\App-ShinedeWake`
 - Runtime PROD: `P:\PROD\ShinedeWake`
 - URL publique attendue: `https://wake.shinederu.ch`
+- URL PWA mobile: `https://wake.shinederu.ch/mobile/`
 - API Wake: `https://api.shinederu.ch/wake/`
 - API Auth: `https://api.shinederu.ch/auth/`
 - Backend source: `P:\DEV\GitHub\App-ShinedeWake-API`
@@ -54,6 +60,10 @@ Le deploiement frontend copie uniquement le contenu de `dist\` vers
 ## Structure
 
 - `src\App.tsx`: application principale, appareils, agent systeme et actions.
+- `src\MobileApp.tsx`: interface mobile minimale et transitions Wake/arret.
+- `src\mobile.tsx`: entree React et enregistrement du worker mobile.
+- `src\mobile.css`: styles charges uniquement par l'entree mobile.
+- `mobile\index.html`: page HTML distincte de la PWA.
 - `src\lib\api.ts`: client HTTP Wake unique pour les fonctions machine.
 - `src\lib\authClient.ts`: client auth commun.
 - `src\types\api.ts`: contrats de l'API Wake, dont `WakeSystemAgent`.
@@ -61,6 +71,9 @@ Le deploiement frontend copie uniquement le contenu de `dist\` vers
 - `src\components\UserAccessPanel.tsx`: gestion des acces Wake.
 - `src\index.css`: styles de l'application.
 - `public\`: assets publics inclus au build.
+- `public\mobile\`: manifeste, worker et icones strictement scopes a `/mobile/`.
+- `public\sw.js`: tombstone racine qui neutralise uniquement l'ancienne PWA.
+- `vite.mobile.config.ts`: second build avec base et assets sous `/mobile/`.
 - `dist\`: artefacts generes par Vite, seuls fichiers deployables en PROD.
 
 Les anciens fichiers `src\lib\corelinkApi.ts` et `src\types\corelink.ts` ont ete
@@ -164,6 +177,28 @@ Etat actuel:
 - resynchronisation unique via `status` et `listDevices`;
 - publication Mercure cote API apres un reveil ou une demande d'arret.
 
+La PWA mobile rafraichit toutes les 15 secondes en etat stable et toutes les
+3 secondes pendant un demarrage ou un arret. Une transition visuelle locale
+expire apres 120 secondes et ne rejoue jamais une commande HTTP.
+
+## PWA mobile
+
+La PWA est limitee a `/mobile/`:
+
+- `id`, `start_url` et `scope` valent `/mobile/`;
+- son service worker est servi a `/mobile/sw.js` et ne controle pas `/`;
+- ses bundles sont produits dans `/mobile/assets/`;
+- seul le shell statique mobile est disponible hors ligne;
+- les API Wake/Auth et toutes les commandes POST restent strictement reseau;
+- aucun Background Sync ni rejeu differe n'est utilise.
+
+Etats de tuile:
+
+- rouge: machine `offline`, action de reveil;
+- vert: machine `online`, ouverture de la confirmation d'arret si disponible;
+- orange: demarrage ou extinction en cours;
+- gris: etat `unknown`, aucune commande.
+
 Evenements publies par l'API Wake:
 
 - `wake.device.wake_requested`
@@ -221,6 +256,7 @@ dans un `.env` frontend.
 ```powershell
 cd P:\DEV\GitHub\App-ShinedeWake
 npm run build
+node --check public\mobile\sw.js
 git -c safe.directory=* diff --check
 rg -n "password|passwd|secret|BEGIN (RSA|OPENSSH|PRIVATE)|api_key|token" P:\DEV\GitHub\App-ShinedeWake
 ```
@@ -236,6 +272,10 @@ Smoke test manuel apres deploiement:
 7. verifier l'editeur et les permissions avec un compte gestionnaire;
 8. verifier l'absence de requete navigateur vers `/corelink/`;
 9. verifier l'absence des actions veille, mesure et redemarrage.
+10. ouvrir `/mobile/` et verifier rouge -> orange -> vert;
+11. verifier vert -> modale, `Non` sans POST et `Oui` -> orange -> rouge;
+12. verifier que `/` n'a ni manifeste ni service worker mobile;
+13. verifier le demarrage hors ligne du shell `/mobile/` sans cache API.
 
 ## Deploiement
 
@@ -249,9 +289,15 @@ deployer `.git`, les sources, `.env*`, `node_modules`, docs, tests ou caches.
 Avant de supprimer d'anciens assets, verifier que le nouvel `index.html` ne les
 reference plus.
 
+Le build produit le panel historique a la racine puis la PWA dans
+`dist\mobile\`. Deployer les assets mobiles avant `mobile\index.html` et
+`mobile\sw.js`. Le tombstone historique `/sw.js` est versionne et doit rester en
+production pour neutraliser l'ancienne PWA racine; il ne doit jamais etre
+remplace par le worker mobile.
+
 ## Notes de reprise
 
-- Etat documente le 2026-07-30.
+- Etat documente le 2026-09-15.
 - Wake est le produit et l'API navigateur uniques.
 - Arcadia ne fait plus partie du contrat.
 - La migration d'acces et de liaison agent se trouve dans

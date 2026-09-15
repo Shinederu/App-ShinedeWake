@@ -1,11 +1,11 @@
 # Guide Agents - ShinedeWake
 
-Ce depot contient le frontend React/Vite du panel Wake. Wake est l'interface
-unique pour le reveil, l'observation de l'agent systeme et l'arret controle des
-machines. Le projet doit rester deployable dans `P:\PROD\ShinedeWake` uniquement
-sous forme d'artefacts `dist\`.
+Ce depot contient le frontend React/Vite du panel Wake et sa PWA mobile separee.
+Wake est l'interface unique pour le reveil, l'observation de l'agent systeme et
+l'arret controle des machines. Le projet doit rester deployable dans
+`P:\PROD\ShinedeWake` uniquement sous forme d'artefacts `dist\`.
 
-Documentation mise a jour le 2026-08-11.
+Documentation mise a jour le 2026-09-15.
 
 ## Lecture de demarrage
 
@@ -56,12 +56,18 @@ Modifier en DEV, builder, commit/push, puis deployer `dist\` si necessaire.
 ## Structure utile
 
 - `src\App.tsx`: logique d'application et UI principale.
+- `src\MobileApp.tsx`: UI minimale chargee uniquement sous `/mobile/`.
+- `src\mobile.tsx` et `src\mobile.css`: entree et styles mobiles isoles.
+- `mobile\index.html`: seconde entree HTML.
 - `src\lib\api.ts`: client Wake unique pour les appareils et actions machine.
 - `src\lib\authClient.ts`: client auth commun.
 - `src\types\api.ts`: contrat Wake, y compris `device.agent`.
 - `src\components\`: composants React.
 - `src\index.css`: styles.
 - `public\`: assets publics.
+- `public\mobile\`: manifeste, worker et icones de la PWA mobile.
+- `public\sw.js`: tombstone de desinscription de l'ancienne PWA racine.
+- `vite.mobile.config.ts`: build mobile avec base `/mobile/`.
 - `dist\`: build Vite, a ne pas modifier a la main.
 
 ## Auth et permissions
@@ -96,6 +102,23 @@ lie est en ligne et si aucun arret n'est deja actif. Ne pas reintegrer un client
 Corelink separe ni les actions veille, redemarrage ou mesure sans demande
 explicite.
 
+Le panneau Agent systeme du desktop doit rester entierement masque lorsque
+`device.power_state` n'est pas strictement `online`. Le stockage est affiche en
+`utilise / total`, en Go sous 1 To et en To a partir de 1 To.
+
+## PWA mobile
+
+- `/` reste le panel complet historique sans redirection par largeur d'ecran.
+- `/mobile/` est une seconde application minimale avec une tuile par machine.
+- Rouge = `offline`, vert = `online`, orange = transition, gris = `unknown`.
+- Le reveil passe immediatement en orange puis attend un etat strict `online`.
+- L'arret exige confirmation, permission, liaison et agent en ligne.
+- Le manifeste, le worker, les icones, les bundles et le stockage transitoire
+  portent tous un perimetre mobile distinct.
+- Le worker `/mobile/sw.js` a le scope `/mobile/` et ne doit jamais controler `/`.
+- Ne jamais cacher/rejouer les appels API ni utiliser Background Sync.
+- Polling 15 secondes stable, 3 secondes en transition, uniquement onglet visible.
+
 ## Temps reel
 
 - Rafraichissement HTTP silencieux toutes les 15 secondes quand l'onglet est
@@ -110,6 +133,7 @@ explicite.
 ```powershell
 cd P:\DEV\GitHub\App-ShinedeWake
 npm run build
+node --check public\mobile\sw.js
 git -c safe.directory=* diff --check
 rg -n "password|passwd|secret|BEGIN (RSA|OPENSSH|PRIVATE)|api_key|token" P:\DEV\GitHub\App-ShinedeWake
 ```
@@ -125,6 +149,9 @@ Smoke test conseille:
 - panneau permissions si gestionnaire;
 - absence d'appel navigateur vers `/corelink/`;
 - absence des actions veille, mesure et redemarrage.
+- `/` conserve le dashboard, la gestion et les metriques sans worker mobile;
+- `/mobile/` couvre reveil, confirmation d'arret, transitions et etat inconnu;
+- le shell mobile fonctionne hors ligne sans rendre les commandes actionnables.
 
 ## Deploiement
 
@@ -143,3 +170,9 @@ Ne pas deployer:
 
 Preserver uniquement les artefacts publics necessaires (`index.html`, `assets\`,
 `favicon.png` ou autres fichiers publics issus du build).
+
+Le build racine doit rester identique au panel historique. Le second build ecrit
+dans `dist\mobile\` sans vider `dist`. En production, copier les assets mobiles
+avant `mobile\index.html` et `mobile\sw.js`; conserver le tombstone historique
+versionne `/sw.js` tant que d'anciennes inscriptions de scope `/` peuvent
+subsister.
