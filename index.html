@@ -32,5 +32,32 @@
       type="module"
       src="/src/main.tsx"
     ></script>
+    <script>
+      // Preserve the cleanup of the retired root PWA on desktop deployments.
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          void (async () => {
+            const wakeScope = `${window.location.origin}/`;
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(
+              registrations.filter((registration) => registration.scope === wakeScope)
+                .map((registration) => registration.unregister())
+            );
+            if ("caches" in window) {
+              const cacheNames = await window.caches.keys();
+              await Promise.all(
+                cacheNames.filter((name) => name.startsWith("shinedewake-shell-"))
+                  .map((name) => window.caches.delete(name))
+              );
+            }
+          })().catch(() => undefined);
+        });
+      }
+      try {
+        window.localStorage.removeItem("shinedewake.pending-actions.v1");
+      } catch {
+        // Storage is optional.
+      }
+    </script>
   </body>
 </html>

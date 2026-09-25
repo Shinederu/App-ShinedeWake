@@ -10,10 +10,11 @@ export default defineConfig({
     },
   },
   resolve: {
+    dedupe: ["react", "react-dom"],
     alias: [
-      { find: "@", replacement: path.resolve(__dirname, "src") },
-      { find: "@shinederu/auth-core", replacement: path.resolve(__dirname, "../Module-Auth-Core/src/index.ts") },
-      { find: "@shinederu/auth-react", replacement: path.resolve(__dirname, "../Module-Auth-React/src/index.ts") },
+      { find: "@", replacement: path.resolve(import.meta.dirname, "src") },
+      { find: "@shinederu/auth-core", replacement: path.resolve(import.meta.dirname, "../Module-Auth-Core/src/index.ts") },
+      { find: "@shinederu/auth-react", replacement: path.resolve(import.meta.dirname, "../Module-Auth-React/src/index.ts") },
     ],
   },
 });

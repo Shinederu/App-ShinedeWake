@@ -3,7 +3,7 @@
 Frontend React/Vite du panel Wake. Il constitue l'interface unique pour
 reveiller une machine, consulter son agent systeme et demander son extinction.
 
-Documentation mise a jour le 2026-09-15.
+Documentation mise a jour le 2026-09-25.
 
 ## Role
 
@@ -230,6 +230,17 @@ Le build utilise des alias Vite vers:
 
 ## Configuration
 
+### Outils frontend
+
+- React et React DOM 19.3, Lucide React 1.48.
+- Vite 8.3, plugin React 6.1 et TypeScript 7.0.
+- Node.js 24 LTS utilise pour les builds, avec les types Node 24.
+- Installer les versions verrouillees avec `npm ci`, puis `npm run build`.
+
+Les deux configurations Vite dedupliquent React et React DOM pour les modules
+Auth importes depuis les depots voisins. Ne pas modifier ces modules pour
+mettre a jour les dependances de Wake.
+
 Fichiers publics suivis:
 
 - `.env.example`
@@ -294,6 +305,9 @@ Le build produit le panel historique a la racine puis la PWA dans
 `mobile\sw.js`. Le tombstone historique `/sw.js` est versionne et doit rester en
 production pour neutraliser l'ancienne PWA racine; il ne doit jamais etre
 remplace par le worker mobile.
+
+Le nettoyage de l'ancienne inscription racine et de son cache est aussi
+conserve dans l'entree HTML desktop, sans toucher au scope `/mobile/`.
 
 ## Notes de reprise
 

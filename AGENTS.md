@@ -5,7 +5,7 @@ Wake est l'interface unique pour le reveil, l'observation de l'agent systeme et
 l'arret controle des machines. Le projet doit rester deployable dans
 `P:\PROD\ShinedeWake` uniquement sous forme d'artefacts `dist\`.
 
-Documentation mise a jour le 2026-09-15.
+Documentation mise a jour le 2026-09-25.
 
 ## Lecture de demarrage
 
@@ -130,6 +130,11 @@ Le panneau Agent systeme du desktop doit rester entierement masque lorsque
 
 ## Verifications
 
+Le frontend utilise React 19.3, Vite 8.3 et TypeScript 7.0. Les builds sont
+verifies avec Node.js 24 LTS. Utiliser `npm ci` pour reproduire le lockfile.
+Garder `resolve.dedupe` pour React/React DOM dans les deux configs Vite afin
+d'eviter une seconde instance issue des modules Auth voisins.
+
 ```powershell
 cd P:\DEV\GitHub\App-ShinedeWake
 npm run build
@@ -171,7 +176,7 @@ Ne pas deployer:
 Preserver uniquement les artefacts publics necessaires (`index.html`, `assets\`,
 `favicon.png` ou autres fichiers publics issus du build).
 
-Le build racine doit rester identique au panel historique. Le second build ecrit
+Le panel racine doit conserver l'interface historique. Le second build ecrit
 dans `dist\mobile\` sans vider `dist`. En production, copier les assets mobiles
 avant `mobile\index.html` et `mobile\sw.js`; conserver le tombstone historique
 versionne `/sw.js` tant que d'anciennes inscriptions de scope `/` peuvent

@@ -1,4 +1,4 @@
-const CACHE_NAME = "shinedewake-mobile-shell-v1";
+const CACHE_NAME = "shinedewake-mobile-shell-v2";
 const MOBILE_SHELL_URL = "/mobile/";
 const STATIC_SHELL = [
   "/mobile/manifest.json",
