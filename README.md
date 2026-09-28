@@ -3,7 +3,7 @@
 Frontend React/Vite du panel Wake. Il constitue l'interface unique pour
 reveiller une machine, consulter son agent systeme et demander son extinction.
 
-Documentation mise a jour le 2026-09-25.
+Documentation mise a jour le 2026-09-28.
 
 ## Role
 
@@ -21,6 +21,18 @@ Deux surfaces coexistent sans redirection automatique:
 
 - `/`: panel complet historique, adapte au poste de travail;
 - `/mobile/`: PWA volontairement minimale avec une tuile d'action par machine.
+
+Le site complet `/` garde son rendu historique au-dessus de 768 px. Sur
+telephone (768 px et moins), les commandes d'en-tete sont groupees, les
+informations reseau/metriques passent sur deux colonnes et les formulaires
+restent utilisables sans debordement horizontal. La PWA `/mobile/` est distincte
+et n'est pas modifiee par ces styles.
+
+Un indicateur anime et un message accompagnent la verification de session puis
+le chargement des ordinateurs, y compris apres connexion. Les actualisations
+explicites conservent les fiches visibles pendant l'attente; le polling reste
+sans animation. Un echec de chargement est distingue d'une liste vide avec un
+bouton de nouvelle tentative. L'animation respecte la reduction des mouvements.
 
 Le panneau d'etat de l'agent systeme et ses metriques n'est affiche que lorsque
 l'etat de puissance Wake de la machine vaut `online`. Le stockage courant est
@@ -311,7 +323,7 @@ conserve dans l'entree HTML desktop, sans toucher au scope `/mobile/`.
 
 ## Notes de reprise
 
-- Etat documente le 2026-09-15.
+- Etat documente le 2026-09-28.
 - Wake est le produit et l'API navigateur uniques.
 - Arcadia ne fait plus partie du contrat.
 - La migration d'acces et de liaison agent se trouve dans

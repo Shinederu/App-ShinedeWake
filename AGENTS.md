@@ -5,7 +5,7 @@ Wake est l'interface unique pour le reveil, l'observation de l'agent systeme et
 l'arret controle des machines. Le projet doit rester deployable dans
 `P:\PROD\ShinedeWake` uniquement sous forme d'artefacts `dist\`.
 
-Documentation mise a jour le 2026-09-25.
+Documentation mise a jour le 2026-09-28.
 
 ## Lecture de demarrage
 
@@ -107,6 +107,12 @@ Le panneau Agent systeme du desktop doit rester entierement masque lorsque
 `utilise / total`, en Go sous 1 To et en To a partir de 1 To.
 
 ## PWA mobile
+
+Le site complet `/` dispose aussi de surcharges responsive dans `src/index.css`
+limitees a 768 px. Garder le rendu historique au-dessus de cette largeur et ne
+pas confondre ces styles avec la PWA. Le chargement des ordinateurs doit rester
+visible au demarrage/apres connexion et lors d'une actualisation explicite, sans
+afficher prematurement une liste vide ni animer le polling silencieux.
 
 - `/` reste le panel complet historique sans redirection par largeur d'ecran.
 - `/mobile/` est une seconde application minimale avec une tuile par machine.

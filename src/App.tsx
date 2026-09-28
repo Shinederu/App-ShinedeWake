@@ -11,6 +11,7 @@ import {
   Fan,
   HardDrive,
   Layers,
+  LoaderCircle,
   LogOut,
   MemoryStick,
   Monitor,
@@ -381,6 +382,8 @@ function App() {
   const [isBooting, setIsBooting] = useState(true);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+  const [devicesError, setDevicesError] = useState<string | null>(null);
   const [activeWakeId, setActiveWakeId] = useState<number | null>(null);
   const [editingDeviceId, setEditingDeviceId] = useState<number | null>(null);
   const [isSavingDevice, setIsSavingDevice] = useState(false);
@@ -467,6 +470,11 @@ function App() {
       setIsRefreshing(true);
     }
 
+    // Keep automatic polling silent; show progress for initial/user-requested loads.
+    if (showErrors || showRefreshState) {
+      setIsLoadingDevices(true);
+    }
+
     try {
       const statusResponse = await wakeApi.getStatus();
 
@@ -482,6 +490,7 @@ function App() {
           user: null,
         });
         setDevices([]);
+        setDevicesError(null);
         if (showErrors && statusResponse.error) {
           setNotice({ kind: "error", text: statusResponse.error });
         }
@@ -492,6 +501,7 @@ function App() {
 
       if (!statusResponse.data.authenticated) {
         setDevices([]);
+        setDevicesError(null);
         setUsers([]);
         return;
       }
@@ -506,6 +516,7 @@ function App() {
       if (shouldLoadDevices) {
         if (!devicesResponse?.ok || !devicesResponse.data) {
           setDevices([]);
+          setDevicesError(devicesResponse?.error ?? "Impossible de charger les ordinateurs disponibles.");
           if (showErrors) {
             setNotice({
               kind: "error",
@@ -516,8 +527,10 @@ function App() {
         }
 
         setDevices(devicesResponse.data);
+        setDevicesError(null);
       } else {
         setDevices([]);
+        setDevicesError(null);
       }
 
       if (!statusResponse.data.can_manage_users) {
@@ -545,6 +558,7 @@ function App() {
       isLoadingDataRef.current = false;
       setIsBooting(false);
       setIsRefreshing(false);
+      setIsLoadingDevices(false);
     }
   };
 
@@ -623,6 +637,7 @@ function App() {
     } finally {
       resetForm();
       setDevices([]);
+      setDevicesError(null);
       setUsers([]);
       setStatus({
         authenticated: false,
@@ -823,16 +838,16 @@ function App() {
             <span>{accountLabel}</span>
           </div>
           {canWake ? (
-            <div className="online-status-card" aria-label={`${onlineDeviceCount} machines en ligne sur ${devices.length}`}>
+            <div className="online-status-card" aria-label={isLoadingDevices && devices.length === 0 ? "Chargement des ordinateurs" : `${onlineDeviceCount} machines en ligne sur ${devices.length}`}>
               <Activity size={18} />
-              <span>En ligne</span>
+              <span>{isLoadingDevices && devices.length === 0 ? "Chargement" : "En ligne"}</span>
               <strong>
-                {onlineDeviceCount}/{devices.length}
+                {isLoadingDevices && devices.length === 0 ? "…" : <>{onlineDeviceCount}/{devices.length}</>}
               </strong>
             </div>
           ) : null}
           <button className="icon-button text-button" onClick={() => void loadData(true)} disabled={isRefreshing}>
-            <RefreshCw size={18} />
+            <RefreshCw size={18} className={isRefreshing ? "loading-spinner" : undefined} />
             {isRefreshing ? "Actualisation" : "Actualiser"}
           </button>
           <button className="icon-button danger-button" onClick={handleLogout}>
@@ -850,7 +865,13 @@ function App() {
         <section className="surface auth-surface">
           <p className="eyebrow">Initialisation</p>
           <h1>ShinedeWake</h1>
-          <p className="lede">Lecture de la session...</p>
+          <div className="devices-loading" role="status">
+            <LoaderCircle className="loading-spinner" size={28} aria-hidden="true" />
+            <div>
+              <strong>{isAuthenticated && canWake ? "Chargement des ordinateurs…" : "Connexion à Wake…"}</strong>
+              <p>{isAuthenticated && canWake ? "Récupération des machines disponibles." : "Vérification de votre session."}</p>
+            </div>
+          </div>
         </section>
       </main>
     );
@@ -893,14 +914,14 @@ function App() {
       {notice ? <div className={`notice ${notice.kind}`}>{notice.text}</div> : null}
 
       <section className="workspace-layout">
-        <section className="surface devices-surface">
+        <section className="surface devices-surface" aria-busy={isLoadingDevices}>
           <div className="section-head">
             <div>
               <p className="eyebrow">Machines</p>
               <h2>Parc machines</h2>
             </div>
             <div className="section-actions">
-              <span className="count-pill">{devices.length} cibles</span>
+              <span className="count-pill">{isLoadingDevices && devices.length === 0 ? "Chargement…" : `${devices.length} cibles`}</span>
               {canManageDevices ? (
                 <button className="icon-button text-button" type="button" onClick={openCreateForm}>
                   <Plus size={18} />
@@ -910,12 +931,33 @@ function App() {
             </div>
           </div>
 
-          {sortedDevices.length === 0 ? (
+          {isLoadingDevices ? (
+            <div className="devices-loading" role="status">
+              <LoaderCircle className="loading-spinner" size={24} aria-hidden="true" />
+              <div>
+                <strong>{devices.length === 0 ? "Chargement des ordinateurs…" : "Actualisation des ordinateurs…"}</strong>
+                <p>Récupération des machines disponibles.</p>
+              </div>
+            </div>
+          ) : null}
+
+          {!isLoadingDevices && devicesError ? (
+            <div className="empty-state" role="alert">
+              <h3>Chargement impossible</h3>
+              <p>{devicesError}</p>
+              <button className="icon-button text-button" type="button" onClick={() => void loadData(true)}>
+                <RefreshCw size={18} />
+                Réessayer
+              </button>
+            </div>
+          ) : null}
+
+          {sortedDevices.length === 0 ? (!isLoadingDevices && !devicesError ? (
             <div className="empty-state">
               <h3>Aucune machine</h3>
               <p>Ajoute une premiere cible pour utiliser le panel.</p>
             </div>
-          ) : (
+          ) : null) : (
             <div className="device-list">
               {sortedDevices.map((device) => {
                 const agentKey = normalizeAgentKeyInput(device.corelink_machine_key);
