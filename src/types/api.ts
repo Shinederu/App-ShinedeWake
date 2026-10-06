@@ -105,29 +105,6 @@ export type WakeDeviceComponent = {
   updated_at?: string;
 };
 
-export type WakePermissionLevel = "none" | "wake" | "manage";
-
-export type WakePermissionSource = "none" | "dedicated" | "global_admin";
-
-export type WakeAccessUser = {
-  id: number;
-  username: string;
-  email: string;
-  role: string;
-  is_global_admin: boolean;
-  has_dedicated_entry: boolean;
-  can_wake: boolean;
-  can_manage: boolean;
-  effective_can_wake: boolean;
-  effective_can_manage: boolean;
-  permission_level: WakePermissionLevel;
-  permission_source: WakePermissionSource;
-  granted_by_user_id: number | null;
-  permission_created_at: string | null;
-  permission_updated_at: string | null;
-  created_at: string;
-};
-
 export type WakeUser = {
   id: number;
   username: string;
@@ -161,11 +138,6 @@ export type WakeStatusResponse = ApiEnvelope<{
 export type WakeDevicesResponse = ApiEnvelope<{
   devices: WakeDevice[];
 }>;
-
-export type WakeUsersResponse = ApiEnvelope<{
-  users: WakeAccessUser[];
-}>;
-
-export type WakeUserResponse = ApiEnvelope<{
-  user: WakeAccessUser;
+export type WakeCreatedDeviceResponse = ApiEnvelope<{
+  device: Pick<WakeDevice, "id" | "name">;
 }>;

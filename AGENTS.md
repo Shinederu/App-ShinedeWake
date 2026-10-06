@@ -5,7 +5,7 @@ Wake est l'interface unique pour le reveil, l'observation de l'agent systeme et
 l'arret controle des machines. Le projet doit rester deployable dans
 `P:\PROD\ShinedeWake` uniquement sous forme d'artefacts `dist\`.
 
-Documentation mise a jour le 2026-09-28.
+Documentation mise a jour le 2026-10-06.
 
 ## Lecture de demarrage
 
@@ -78,11 +78,25 @@ Modifier en DEV, builder, commit/push, puis deployer `dist\` si necessaire.
   `status.can_manage_devices`, `status.can_manage_users` et le resume
   `status.can_manage`, mais ne decide jamais l'autorisation finale.
 - Permissions Wake stables:
-  - `wake.devices.wake`
+  - `wake.devices.<id>.wake` (voir et allumer un ordinateur precis)
   - `wake.devices.shutdown`
   - `wake.devices.manage`
   - `wake.users.manage`
 - Aucune connexion DB cote frontend.
+- `can_wake` resume l'acces a au moins un ordinateur, pas un droit universel.
+- `listDevices` est filtree cote serveur. Ne jamais ajouter une machine a
+  partir d'une reponse CRUD/commande sans relire cette liste.
+- Les droits de gestion seuls ne donnent pas acces aux machines. Seul l'admin
+  global Core garde un bypass complet.
+- Les acces se gerent dans les permissions du domaine
+  (`https://shinederu.ch/permissions`), projet Wake. Ne pas restaurer l'ancien
+  editeur global ni les appels `listUsers`/`updateUserPermissions`.
+- Effacer les cartes, donnees d'edition et confirmations lors d'une revocation;
+  ignorer les reponses en vol anterieures a une invalidation de session/droits.
+- Pour une machine existante, l'identite technique (MAC, IP, broadcast, port,
+  liaison agent) est en lecture seule hors admin global Core. Ne pas permettre
+  a un gestionnaire de rediriger son acces vers un autre ordinateur. La creation
+  reste possible avec le droit de gestion, mais n'accorde aucun acces implicite.
 
 ## Agent systeme
 
@@ -97,7 +111,8 @@ agent`.
 - jobs d'arret actifs.
 
 Le bouton d'arret utilise uniquement `POST ?action=shutdownDevice`. Il doit etre
-actif seulement si l'utilisateur possede `wake.devices.shutdown`, si l'agent
+actif seulement si l'ordinateur lui est autorise, si l'utilisateur possede
+`wake.devices.shutdown`, si l'agent
 lie est en ligne et si aucun arret n'est deja actif. Ne pas reintegrer un client
 Corelink separe ni les actions veille, redemarrage ou mesure sans demande
 explicite.
@@ -129,8 +144,8 @@ afficher prematurement une liste vide ni animer le polling silencieux.
 
 - Rafraichissement HTTP silencieux toutes les 15 secondes quand l'onglet est
   visible.
-- L'API Wake publie des evenements Mercure `wake.device.*`, mais ce frontend ne
-  s'y abonne pas encore.
+- Les publications Mercure Wake sont suspendues tant qu'un contrat d'abonnement
+  par ordinateur n'existe pas. Le frontend ne s'y abonne pas.
 - Toute future integration Mercure doit garder une resynchronisation HTTP via
   `status` et `listDevices`.
 

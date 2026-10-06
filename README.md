@@ -3,7 +3,7 @@
 Frontend React/Vite du panel Wake. Il constitue l'interface unique pour
 reveiller une machine, consulter son agent systeme et demander son extinction.
 
-Documentation mise a jour le 2026-09-28.
+Documentation mise a jour le 2026-10-06.
 
 ## Role
 
@@ -14,8 +14,9 @@ ShinedeWake permet aux utilisateurs autorises de:
 - visualiser l'etat de l'agent systeme et ses dernieres metriques CPU, RAM, GPU,
   disques et uptime;
 - demander un arret controle quand l'agent lie est disponible;
-- maintenir les machines, leurs composants et les acces Wake avec les droits de
-  gestion.
+- maintenir les machines et leurs composants avec les droits de gestion;
+- rejoindre la gestion des acces par ordinateur dans les permissions du domaine
+  avec un compte admin global Core.
 
 Deux surfaces coexistent sans redirection automatique:
 
@@ -80,7 +81,8 @@ Le deploiement frontend copie uniquement le contenu de `dist\` vers
 - `src\lib\authClient.ts`: client auth commun.
 - `src\types\api.ts`: contrats de l'API Wake, dont `WakeSystemAgent`.
 - `src\components\LoginPanel.tsx`: panneau de connexion.
-- `src\components\UserAccessPanel.tsx`: gestion des acces Wake.
+- `src\components\UserAccessPanel.tsx`: rappel des acces par ordinateur et lien
+  vers la gestion centralisee du domaine.
 - `src\index.css`: styles de l'application.
 - `public\`: assets publics inclus au build.
 - `public\mobile\`: manifeste, worker et icones strictement scopes a `/mobile/`.
@@ -102,8 +104,10 @@ Wake:
 - `POST https://api.shinederu.ch/wake/?action=createDevice`
 - `PUT https://api.shinederu.ch/wake/?action=updateDevice`
 - `DELETE https://api.shinederu.ch/wake/?action=deleteDevice`
-- `GET https://api.shinederu.ch/wake/?action=listUsers`
-- `PUT https://api.shinederu.ch/wake/?action=updateUserPermissions`
+
+Les anciens endpoints Wake `listUsers` et `updateUserPermissions` ne sont plus
+consommes. Ils ne doivent pas etre retablis: l'ancien niveau global ecrasait les
+roles Wake definis dans le domaine.
 
 Auth est consomme indirectement par `@shinederu/auth-core` via
 `VITE_SHINEDERU_API_AUTH_URL`.
@@ -158,17 +162,42 @@ libelle produit est `Cle de liaison agent`; les panneaux visibles utilisent
 
 Permissions Wake:
 
-- `wake.devices.wake`: acces au panel et envoi WOL.
-- `wake.devices.shutdown`: demande d'arret via l'agent lie.
+- `wake.devices.<id>.wake`: voir et allumer l'ordinateur correspondant.
+- `wake.devices.shutdown`: demande d'arret via l'agent lie, uniquement sur un
+  ordinateur autorise par sa permission individuelle.
 - `wake.devices.manage`: creation, edition et suppression des machines.
-- `wake.users.manage`: gestion des acces utilisateurs.
+- `wake.users.manage`: affichage de l'information sur la gestion centralisee;
+  ne permet ni une attribution locale ni un acces implicite aux ordinateurs.
 
-Le statut expose `can_wake`, `can_shutdown`, `can_manage_devices`,
-`can_manage_users` et le resume compatible `can_manage`. Le bouton d'arret
-reste desactive sans permission, sans agent en ligne, lorsqu'un job d'arret est
-actif ou pendant le court delai d'arret deja programme. Le role projet `wake`
-represente dans l'UI l'utilisation normale (reveil et arret); le role `manage`
-ajoute la gestion.
+Le statut expose `can_wake` (au moins un ordinateur autorise ou admin global),
+`can_shutdown`, `can_manage_devices`, `can_manage_users` et le resume compatible
+`can_manage`. La liste est filtree cote serveur avant chargement de l'etat et
+des metriques. Les droits de gestion ne donnent pas implicitement acces aux
+machines; seul l'admin global Core conserve son bypass integral.
+
+Les acces sont attribues dans `https://shinederu.ch/permissions`, projet Wake:
+chaque ordinateur dispose d'une permission stable par identifiant et d'un role
+pratique `device_<id>`. Un role personnalise du domaine peut aussi porter
+plusieurs permissions individuelles. Renommer une machine ne change pas son
+identifiant de permission. Aucun ancien acces global n'est repris automatiquement.
+
+Le panneau Wake ne contient plus d'editeur de roles: seuls les admins globaux
+voient le lien vers l'administration du domaine; les autres gestionnaires sont
+invites a contacter un admin global.
+
+Le bouton d'arret reste desactive sans permission, sans agent en ligne,
+lorsqu'un job d'arret est actif ou pendant le court delai d'arret deja programme.
+Les deux interfaces effacent les machines et confirmations devenues interdites
+des qu'un statut ou une reponse de refus est recu. Les reponses de commandes ne
+reinjectent jamais une machine dans la liste; seule sa relecture filtree le peut.
+
+Pour un ordinateur existant, seul un admin global Core peut changer l'identite
+technique (MAC, IP cible, broadcast, port et cle de liaison agent). Ces champs
+restent en lecture seule pour les autres gestionnaires afin de ne pas rediriger
+un droit existant vers un autre ordinateur. Le nom, la description, les
+composants, l'ordre et l'activation restent modifiables avec les droits requis.
+Une creation permet de saisir l'identite technique, sans attribuer d'acces au
+nouvel ordinateur.
 
 ## Base de donnees
 
@@ -187,7 +216,8 @@ Etat actuel:
 - rafraichissement HTTP silencieux toutes les 15 secondes quand l'onglet est
   visible;
 - resynchronisation unique via `status` et `listDevices`;
-- publication Mercure cote API apres un reveil ou une demande d'arret.
+- publications Mercure Wake suspendues tant qu'un contrat d'abonnement
+  respectant les droits par ordinateur n'est pas disponible.
 
 La PWA mobile rafraichit toutes les 15 secondes en etat stable et toutes les
 3 secondes pendant un demarrage ou un arret. Une transition visuelle locale
@@ -211,19 +241,10 @@ Etats de tuile:
 - orange: demarrage ou extinction en cours;
 - gris: etat `unknown`, aucune commande.
 
-Evenements publies par l'API Wake:
-
-- `wake.device.wake_requested`
-- `wake.device.wake_succeeded`
-- `wake.device.wake_failed`
-- `wake.device.shutdown_requested`
-
-Topics:
-
-- `https://api.shinederu.ch/wake/topics/devices`
-- `https://api.shinederu.ch/wake/topics/devices/{DEVICE_ID}`
-
-Mercure ne doit jamais servir a declencher une commande critique.
+Ne pas reactiver les anciens evenements publics `wake.device.*` ou le topic
+global: ils exposeraient des machines aux comptes qui n'y ont pas acces.
+Une future integration doit filtrer les abonnements par ordinateur, garder la
+resynchronisation HTTP et ne jamais declencher de commande critique via Mercure.
 
 ## Dependances inter-projets
 
@@ -292,13 +313,22 @@ Smoke test manuel apres deploiement:
 4. reveiller une machine autorisee;
 5. demander l'arret d'une machine liee et en ligne;
 6. verifier que l'arret devient indisponible pendant le job actif;
-7. verifier l'editeur et les permissions avec un compte gestionnaire;
+7. verifier l'editeur machine avec un compte gestionnaire et le lien vers les
+   permissions du domaine avec un admin global;
 8. verifier l'absence de requete navigateur vers `/corelink/`;
 9. verifier l'absence des actions veille, mesure et redemarrage.
 10. ouvrir `/mobile/` et verifier rouge -> orange -> vert;
 11. verifier vert -> modale, `Non` sans POST et `Oui` -> orange -> rouge;
 12. verifier que `/` n'a ni manifeste ni service worker mobile;
 13. verifier le demarrage hors ligne du shell `/mobile/` sans cache API.
+14. avec un compte autorise uniquement pour Gooba, verifier l'absence de BooTao
+    dans les deux interfaces, puis la disparition de Gooba apres revocation;
+15. verifier qu'un admin global Core garde toutes les machines et que les
+    anciennes routes de gestion des acces Wake ne sont jamais appelees;
+16. verifier qu'une creation recharge la liste filtree sans donner
+    automatiquement acces au nouvel ordinateur.
+17. verifier que l'identite technique d'une machine existante est en lecture
+    seule pour un gestionnaire non global et editable pour un admin global Core.
 
 ## Deploiement
 
@@ -323,8 +353,9 @@ conserve dans l'entree HTML desktop, sans toucher au scope `/mobile/`.
 
 ## Notes de reprise
 
-- Etat documente le 2026-09-28.
+- Etat documente le 2026-10-06.
 - Wake est le produit et l'API navigateur uniques.
 - Arcadia ne fait plus partie du contrat.
-- La migration d'acces et de liaison agent se trouve dans
-  `App-ShinedeWake-API\sql\005_wake_shutdown_permission_and_agent_link.sql`.
+- Les migrations de permissions sont documentees dans le README de
+  `App-ShinedeWake-API`. La migration par ordinateur repart sans attribution
+  automatique, tout en conservant `core.super_admin`.

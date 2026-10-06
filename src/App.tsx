@@ -29,13 +29,11 @@ import { LoginPanel } from "@/components/LoginPanel";
 import { UserAccessPanel } from "@/components/UserAccessPanel";
 import { wakeApi } from "@/lib/api";
 import type {
-  WakeAccessUser,
   WakeAgentMetrics,
   WakeAgentShutdownJob,
   WakeComponentType,
   WakeDevice,
   WakeDeviceComponent,
-  WakePermissionLevel,
   WakeStatus,
   WakeSystemAgent,
 } from "@/types/api";
@@ -388,17 +386,15 @@ function App() {
   const [editingDeviceId, setEditingDeviceId] = useState<number | null>(null);
   const [isSavingDevice, setIsSavingDevice] = useState(false);
   const [deletingDeviceId, setDeletingDeviceId] = useState<number | null>(null);
-  const [users, setUsers] = useState<WakeAccessUser[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [updatingUserId, setUpdatingUserId] = useState<number | null>(null);
   const [activeShutdownId, setActiveShutdownId] = useState<number | null>(null);
-  const [userSearch, setUserSearch] = useState("");
   const [notice, setNotice] = useState<NoticeState>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [form, setForm] = useState<DeviceFormState>(EMPTY_FORM);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [componentToAddType, setComponentToAddType] = useState<WakeComponentType>("processor");
-  const isLoadingDataRef = useRef(false);
+  const activeLoadIdRef = useRef<number | null>(null);
+  const loadSequenceRef = useRef(0);
+  const requestEpochRef = useRef(0);
 
   const canManageDevices = status?.can_manage_devices ?? false;
   const canManageUsers = status?.can_manage_users ?? false;
@@ -406,6 +402,7 @@ function App() {
   const canWake = status?.can_wake ?? false;
   const canShutdown = status?.can_shutdown ?? false;
   const isAuthenticated = status?.authenticated ?? false;
+  const isTechnicalIdentityReadOnly = editingDeviceId !== null && !status?.is_global_admin;
 
   const sortedDevices = useMemo(
     () =>
@@ -459,12 +456,27 @@ function App() {
     scrollToEditor();
   };
 
-  const loadData = async (showRefreshState = false, showErrors = true, includeUsers = true) => {
-    if (isLoadingDataRef.current) {
+  const invalidateInFlightRequests = () => {
+    requestEpochRef.current += 1;
+    activeLoadIdRef.current = null;
+  };
+
+  const clearDeviceAccess = () => {
+    setDevices([]);
+    setDevicesError(null);
+    resetForm();
+  };
+
+  const loadData = async (showRefreshState = false, showErrors = true) => {
+    if (activeLoadIdRef.current !== null) {
       return;
     }
 
-    isLoadingDataRef.current = true;
+    const loadId = ++loadSequenceRef.current;
+    const requestEpoch = requestEpochRef.current;
+    const isCurrentLoad = () =>
+      requestEpochRef.current === requestEpoch && activeLoadIdRef.current === loadId;
+    activeLoadIdRef.current = loadId;
 
     if (showRefreshState) {
       setIsRefreshing(true);
@@ -477,6 +489,9 @@ function App() {
 
     try {
       const statusResponse = await wakeApi.getStatus();
+      if (!isCurrentLoad()) {
+        return;
+      }
 
       if (!statusResponse.ok || !statusResponse.data) {
         setStatus({
@@ -489,8 +504,7 @@ function App() {
           is_global_admin: false,
           user: null,
         });
-        setDevices([]);
-        setDevicesError(null);
+        clearDeviceAccess();
         if (showErrors && statusResponse.error) {
           setNotice({ kind: "error", text: statusResponse.error });
         }
@@ -500,71 +514,67 @@ function App() {
       setStatus(statusResponse.data);
 
       if (!statusResponse.data.authenticated) {
-        setDevices([]);
-        setDevicesError(null);
-        setUsers([]);
+        clearDeviceAccess();
         return;
       }
 
+      if (!statusResponse.data.can_manage_devices) {
+        resetForm();
+      }
       const shouldLoadDevices = statusResponse.data.can_wake;
-      const shouldLoadUsers = includeUsers && statusResponse.data.can_manage_users;
-      const [devicesResponse, usersResponse] = await Promise.all([
-        shouldLoadDevices ? wakeApi.listDevices() : Promise.resolve(null),
-        shouldLoadUsers ? wakeApi.listUsers() : Promise.resolve(null),
-      ]);
-
-      if (shouldLoadDevices) {
-        if (!devicesResponse?.ok || !devicesResponse.data) {
-          setDevices([]);
-          setDevicesError(devicesResponse?.error ?? "Impossible de charger les ordinateurs disponibles.");
-          if (showErrors) {
-            setNotice({
-              kind: "error",
-              text: devicesResponse?.error ?? "Impossible de charger les machines autorisees.",
-            });
-          }
-          return;
-        }
-
-        setDevices(devicesResponse.data);
-        setDevicesError(null);
-      } else {
-        setDevices([]);
-        setDevicesError(null);
+      if (!shouldLoadDevices) {
+        clearDeviceAccess();
+        return;
       }
-
-      if (!statusResponse.data.can_manage_users) {
-        setUsers([]);
+      const devicesResponse = await wakeApi.listDevices();
+      if (!isCurrentLoad()) {
         return;
       }
 
-      if (!includeUsers) {
-        return;
-      }
-
-      if (!usersResponse?.ok || !usersResponse.data) {
-        setUsers([]);
+      if (!devicesResponse.ok || !devicesResponse.data) {
+        clearDeviceAccess();
+        setDevicesError(devicesResponse.error ?? "Impossible de charger les ordinateurs disponibles.");
         if (showErrors) {
           setNotice({
             kind: "error",
-            text: usersResponse?.error ?? "Impossible de charger les utilisateurs autorises.",
+            text: devicesResponse.error ?? "Impossible de charger les machines autorisees.",
           });
         }
         return;
       }
 
-      setUsers(usersResponse.data);
+      setDevices(devicesResponse.data);
+      setDevicesError(null);
+      if (editingDeviceId !== null && !devicesResponse.data.some((device) => device.id === editingDeviceId)) {
+        resetForm();
+      }
     } finally {
-      isLoadingDataRef.current = false;
-      setIsBooting(false);
-      setIsRefreshing(false);
-      setIsLoadingDevices(false);
+      if (activeLoadIdRef.current === loadId) {
+        activeLoadIdRef.current = null;
+        setIsBooting(false);
+        setIsRefreshing(false);
+        setIsLoadingDevices(false);
+      }
     }
+  };
+
+  const refreshAfterCommand = async (httpStatus: number) => {
+    invalidateInFlightRequests();
+    if (httpStatus === 401 || httpStatus === 403 || httpStatus === 404) {
+      clearDeviceAccess();
+    }
+    await loadData(false, false);
   };
 
   useEffect(() => {
     void loadData();
   }, []);
+
+  useEffect(() => {
+    if (editingDeviceId !== null && !devices.some((device) => device.id === editingDeviceId)) {
+      resetForm();
+    }
+  }, [devices, editingDeviceId]);
 
   useEffect(() => {
     if (!isAuthenticated || !canWake) {
@@ -576,7 +586,7 @@ function App() {
         return;
       }
 
-      void loadData(false, false, false);
+      void loadData(false, false);
     };
 
     const intervalId = window.setInterval(refreshSilently, AUTO_REFRESH_INTERVAL_MS);
@@ -614,9 +624,14 @@ function App() {
 
     setIsAuthenticating(true);
     setLoginError(null);
+    invalidateInFlightRequests();
+    const loginEpoch = requestEpochRef.current;
 
     try {
       const response = await auth.login({ username, password });
+      if (requestEpochRef.current !== loginEpoch) {
+        return;
+      }
       if (!response.ok) {
         setLoginError(response.error ?? "Connexion refusee.");
         return;
@@ -630,15 +645,17 @@ function App() {
   };
 
   const handleLogout = async () => {
+    invalidateInFlightRequests();
+    clearDeviceAccess();
     setIsRefreshing(true);
 
     try {
       await auth.logout();
     } finally {
+      invalidateInFlightRequests();
       resetForm();
       setDevices([]);
       setDevicesError(null);
-      setUsers([]);
       setStatus({
         authenticated: false,
         can_wake: false,
@@ -650,24 +667,30 @@ function App() {
         user: null,
       });
       setIsRefreshing(false);
+      setIsLoadingDevices(false);
     }
   };
 
   const handleWake = async (deviceId: number) => {
+    const actionEpoch = requestEpochRef.current;
     setActiveWakeId(deviceId);
 
     try {
       const response = await wakeApi.wakeDevice(deviceId);
+      if (requestEpochRef.current !== actionEpoch) {
+        return;
+      }
       if (!response.ok) {
         setNotice({
           kind: "error",
           text: response.error ?? "Le paquet WOL n'a pas pu etre envoye.",
         });
+        await refreshAfterCommand(response.status);
         return;
       }
 
       setNotice({ kind: "success", text: "Magic packet envoye." });
-      await loadData();
+      await refreshAfterCommand(response.status);
     } finally {
       setActiveWakeId(null);
     }
@@ -679,17 +702,22 @@ function App() {
     }
 
     setActiveShutdownId(device.id);
+    const actionEpoch = requestEpochRef.current;
 
     try {
       const response = await wakeApi.shutdownDevice(device.id);
+      if (requestEpochRef.current !== actionEpoch) {
+        return;
+      }
 
       if (!response.ok) {
         setNotice({ kind: "error", text: response.error ?? "Extinction impossible." });
+        await refreshAfterCommand(response.status);
         return;
       }
 
       setNotice({ kind: "success", text: "Extinction demandee." });
-      await loadData(false, false, false);
+      await refreshAfterCommand(response.status);
     } finally {
       setActiveShutdownId(null);
     }
@@ -709,6 +737,7 @@ function App() {
     }
 
     setIsSavingDevice(true);
+    const actionEpoch = requestEpochRef.current;
 
     try {
       const payload = normalizeForm(form);
@@ -716,9 +745,13 @@ function App() {
         editingDeviceId === null
           ? await wakeApi.createDevice(payload)
           : await wakeApi.updateDevice(editingDeviceId, payload);
+      if (requestEpochRef.current !== actionEpoch) {
+        return;
+      }
 
       if (!response.ok) {
         setNotice({ kind: "error", text: response.error ?? "Enregistrement impossible." });
+        await refreshAfterCommand(response.status);
         return;
       }
 
@@ -727,7 +760,7 @@ function App() {
         text: editingDeviceId === null ? "Machine ajoutee." : "Machine mise a jour.",
       });
       resetForm();
-      await loadData();
+      await refreshAfterCommand(response.status);
     } finally {
       setIsSavingDevice(false);
     }
@@ -739,11 +772,16 @@ function App() {
     }
 
     setDeletingDeviceId(deviceId);
+    const actionEpoch = requestEpochRef.current;
 
     try {
       const response = await wakeApi.deleteDevice(deviceId);
+      if (requestEpochRef.current !== actionEpoch) {
+        return;
+      }
       if (!response.ok) {
         setNotice({ kind: "error", text: response.error ?? "Suppression impossible." });
+        await refreshAfterCommand(response.status);
         return;
       }
 
@@ -752,36 +790,9 @@ function App() {
       }
 
       setNotice({ kind: "success", text: "Machine supprimee." });
-      await loadData();
+      await refreshAfterCommand(response.status);
     } finally {
       setDeletingDeviceId(null);
-    }
-  };
-
-  const handleUpdateUserPermission = async (userId: number, level: WakePermissionLevel) => {
-    setUpdatingUserId(userId);
-    setIsLoadingUsers(true);
-
-    try {
-      const payload = {
-        can_wake: level === "wake" || level === "manage",
-        can_manage: level === "manage",
-      };
-      const response = await wakeApi.updateUserPermissions(userId, payload);
-
-      if (!response.ok) {
-        setNotice({
-          kind: "error",
-          text: response.error ?? "Mise a jour des permissions impossible.",
-        });
-        return;
-      }
-
-      setNotice({ kind: "success", text: "Permissions utilisateur mises a jour." });
-      await loadData(true);
-    } finally {
-      setUpdatingUserId(null);
-      setIsLoadingUsers(false);
     }
   };
 
@@ -886,14 +897,14 @@ function App() {
     );
   }
 
-  if (!canWake && !canManageUsers) {
+  if (!canWake && !canManage) {
     return (
       <main className="app-frame auth-frame">
         {renderShellHeader()}
         <section className="surface auth-surface">
           <p className="eyebrow">Acces</p>
           <h2>Compte non autorise</h2>
-          <p className="lede">Aucun role Wake n'est attache a ce compte.</p>
+          <p className="lede">Aucun ordinateur n’est autorisé pour ce compte. Contacte un admin global pour obtenir un accès.</p>
           <div className="session-card wide-session-card">
             <strong>{status?.user?.username ?? "Utilisateur inconnu"}</strong>
             <span>{status?.user?.email ?? ""}</span>
@@ -955,7 +966,7 @@ function App() {
           {sortedDevices.length === 0 ? (!isLoadingDevices && !devicesError ? (
             <div className="empty-state">
               <h3>Aucune machine</h3>
-              <p>Ajoute une premiere cible pour utiliser le panel.</p>
+              <p>{status?.is_global_admin ? "Ajoute une premiere cible pour utiliser le panel." : "Aucun ordinateur n’est actuellement autorisé et disponible pour ce compte."}</p>
             </div>
           ) : null) : (
             <div className="device-list">
@@ -1159,6 +1170,9 @@ function App() {
             </div>
 
             <form className="device-form" onSubmit={handleSubmitDevice}>
+              {isTechnicalIdentityReadOnly ? (
+                <p className="helper-note">L’identité réseau et la liaison agent sont gérées par un admin global Core.</p>
+              ) : null}
               <fieldset>
                 <legend>Identite</legend>
                 <label>
@@ -1188,6 +1202,7 @@ function App() {
                     type="text"
                     placeholder="bootao"
                     value={form.corelink_machine_key}
+                    readOnly={isTechnicalIdentityReadOnly}
                     onChange={(event) =>
                       setForm((current) => ({
                         ...current,
@@ -1206,6 +1221,7 @@ function App() {
                     type="text"
                     placeholder="50-EB-F6-B3-5F-BB"
                     value={form.mac_address}
+                    readOnly={isTechnicalIdentityReadOnly}
                     onChange={(event) =>
                       setForm((current) => ({
                         ...current,
@@ -1222,6 +1238,7 @@ function App() {
                       type="text"
                       placeholder="192.168.10.30"
                       value={form.target_ip}
+                      readOnly={isTechnicalIdentityReadOnly}
                       onChange={(event) => setForm((current) => ({ ...current, target_ip: event.target.value }))}
                     />
                   </label>
@@ -1231,6 +1248,7 @@ function App() {
                       type="text"
                       placeholder="192.168.10.255"
                       value={form.broadcast_address}
+                      readOnly={isTechnicalIdentityReadOnly}
                       onChange={(event) =>
                         setForm((current) => ({ ...current, broadcast_address: event.target.value }))
                       }
@@ -1245,6 +1263,7 @@ function App() {
                       min="1"
                       max="65535"
                       value={form.port}
+                      readOnly={isTechnicalIdentityReadOnly}
                       onChange={(event) => setForm((current) => ({ ...current, port: event.target.value }))}
                     />
                   </label>
@@ -1387,14 +1406,7 @@ function App() {
 
       {canManageUsers ? (
         <section className="surface users-surface">
-          <UserAccessPanel
-            users={users}
-            isLoading={isLoadingUsers}
-            search={userSearch}
-            onSearchChange={setUserSearch}
-            updatingUserId={updatingUserId}
-            onLevelChange={handleUpdateUserPermission}
-          />
+          <UserAccessPanel isGlobalAdmin={status?.is_global_admin ?? false} />
         </section>
       ) : null}
     </main>

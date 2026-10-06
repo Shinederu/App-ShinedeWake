@@ -111,6 +111,7 @@ function MobileApp() {
   const loadSequenceRef = useRef(0);
   const requestEpochRef = useRef(0);
   const pendingActionsRef = useRef(pendingActions);
+  const authorizedDeviceIdsRef = useRef(new Set<number>());
   const appContentRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
@@ -151,6 +152,7 @@ function MobileApp() {
       setConfirmDevice(null);
       setStatus(ANONYMOUS_STATUS);
       setDevices([]);
+      authorizedDeviceIdsRef.current.clear();
       storePendingActions({});
       setIsWakeConnected(true);
       setLoginError(message);
@@ -233,6 +235,12 @@ function MobileApp() {
             return !reportLoginErrors;
           }
 
+          if (statusResponse.status === 403) {
+            setDevices([]);
+            authorizedDeviceIdsRef.current.clear();
+            storePendingActions({});
+            setConfirmDevice(null);
+          }
           setIsWakeConnected(false);
           if (showErrors) {
             setNotice({
@@ -250,6 +258,7 @@ function MobileApp() {
 
         if (!statusResponse.data.authenticated) {
           setDevices([]);
+          authorizedDeviceIdsRef.current.clear();
           storePendingActions({});
           setIsWakeConnected(true);
           if (reportLoginErrors) {
@@ -260,6 +269,7 @@ function MobileApp() {
 
         if (!statusResponse.data.can_wake) {
           setDevices([]);
+          authorizedDeviceIdsRef.current.clear();
           storePendingActions({});
           setIsWakeConnected(true);
           return true;
@@ -276,6 +286,12 @@ function MobileApp() {
             return false;
           }
 
+          if (devicesResponse.status === 403 || devicesResponse.status === 404) {
+            setDevices([]);
+            authorizedDeviceIdsRef.current.clear();
+            storePendingActions({});
+            setConfirmDevice(null);
+          }
           setIsWakeConnected(false);
           if (showErrors) {
             setNotice({
@@ -289,6 +305,7 @@ function MobileApp() {
           return false;
         }
 
+        authorizedDeviceIdsRef.current = new Set(devicesResponse.data.map((device) => device.id));
         setDevices(devicesResponse.data);
         reconcilePendingActions(devicesResponse.data);
         setIsWakeConnected(true);
@@ -479,7 +496,7 @@ function MobileApp() {
     });
 
     const response = await wakeApi.wakeDevice(device.id);
-    if (requestEpochRef.current !== actionEpoch) {
+    if (requestEpochRef.current !== actionEpoch || !authorizedDeviceIdsRef.current.has(device.id)) {
       return;
     }
 
@@ -491,6 +508,13 @@ function MobileApp() {
         invalidateInFlightRequests();
         showAnonymousState("Ta session a expiré. Reconnecte-toi.");
         return;
+      }
+      if (response.status === 403 || response.status === 404) {
+        invalidateInFlightRequests();
+        authorizedDeviceIdsRef.current.clear();
+        setDevices([]);
+        storePendingActions({});
+        setConfirmDevice(null);
       }
       if (response.status === 0) {
         setIsWakeConnected(false);
@@ -560,7 +584,7 @@ function MobileApp() {
     setConfirmDevice(null);
 
     const response = await wakeApi.shutdownDevice(device.id);
-    if (requestEpochRef.current !== actionEpoch) {
+    if (requestEpochRef.current !== actionEpoch || !authorizedDeviceIdsRef.current.has(device.id)) {
       return;
     }
 
@@ -572,6 +596,13 @@ function MobileApp() {
         invalidateInFlightRequests();
         showAnonymousState("Ta session a expiré. Reconnecte-toi.");
         return;
+      }
+      if (response.status === 403 || response.status === 404) {
+        invalidateInFlightRequests();
+        authorizedDeviceIdsRef.current.clear();
+        setDevices([]);
+        storePendingActions({});
+        setConfirmDevice(null);
       }
       if (response.status === 0) {
         setIsWakeConnected(false);
@@ -627,7 +658,7 @@ function MobileApp() {
       <main className="mobile-wake-screen mobile-centered-screen">
         <section className="mobile-message-panel">
           <h1>Accès refusé</h1>
-          <p>Ce compte n'a pas accès aux machines Wake.</p>
+          <p>Aucun ordinateur n’est autorisé pour ce compte. Contacte un admin global pour obtenir un accès.</p>
           <button
             type="button"
             className="mobile-secondary-button"
@@ -721,7 +752,7 @@ function MobileApp() {
         ) : (
           <section className="mobile-message-panel mobile-empty-panel">
             <h2>Aucune machine</h2>
-            <p>Aucune machine active n'est disponible.</p>
+            <p>Aucun ordinateur autorisé et actif n’est disponible.</p>
           </section>
         )}
 
