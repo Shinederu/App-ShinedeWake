@@ -1,11 +1,11 @@
 # Guide Agents - ShinedeWake
 
-Ce depot contient le frontend React/Vite du panel Wake et sa PWA mobile separee.
+Ce depot contient le frontend React/Vite du panel Wake, installable en PWA.
 Wake est l'interface unique pour le reveil, l'observation de l'agent systeme et
 l'arret controle des machines. Le projet doit rester deployable dans
 `P:\PROD\ShinedeWake` uniquement sous forme d'artefacts `dist\`.
 
-Documentation mise a jour le 2026-10-06.
+Documentation mise a jour le 2026-10-08.
 
 ## Lecture de demarrage
 
@@ -55,19 +55,22 @@ Modifier en DEV, builder, commit/push, puis deployer `dist\` si necessaire.
 
 ## Structure utile
 
-- `src\App.tsx`: logique d'application et UI principale.
-- `src\MobileApp.tsx`: UI minimale chargee uniquement sous `/mobile/`.
-- `src\mobile.tsx` et `src\mobile.css`: entree et styles mobiles isoles.
-- `mobile\index.html`: seconde entree HTML.
+- `src\App.tsx`: logique et UI complete uniques, navigateur et PWA.
+- `src\main.tsx`: entree React, enregistrement du worker racine en production
+  et nettoyage cible de l'ancienne installation mobile.
 - `src\lib\api.ts`: client Wake unique pour les appareils et actions machine.
 - `src\lib\authClient.ts`: client auth commun.
 - `src\types\api.ts`: contrat Wake, y compris `device.agent`.
 - `src\components\`: composants React.
 - `src\index.css`: styles.
 - `public\`: assets publics.
-- `public\mobile\`: manifeste, worker et icones de la PWA mobile.
-- `public\sw.js`: tombstone de desinscription de l'ancienne PWA racine.
-- `vite.mobile.config.ts`: build mobile avec base `/mobile/`.
+- `public\manifest.json` et `public\icons\`: manifeste et icones de la PWA.
+- `public\sw.js`: modele du worker racine; sa liste de fichiers et son nom de
+  cache sont injectes au build.
+- `public\mobile\`: compatibilite seulement: redirection, ancien manifeste,
+  tombstone du worker mobile et icones historiques.
+- `vite.config.ts` et `build\pwa.ts`: build unique et generation du worker final
+  dans `closeBundle` (hash de version et liste explicite des fichiers statiques).
 - `dist\`: build Vite, a ne pas modifier a la main.
 
 ## Auth et permissions
@@ -121,24 +124,39 @@ Le panneau Agent systeme du desktop doit rester entierement masque lorsque
 `device.power_state` n'est pas strictement `online`. Le stockage est affiche en
 `utilise / total`, en Go sous 1 To et en To a partir de 1 To.
 
-## PWA mobile
+## PWA unique et compatibilite mobile
 
-Le site complet `/` dispose aussi de surcharges responsive dans `src/index.css`
-limitees a 768 px. Garder le rendu historique au-dessus de cette largeur et ne
-pas confondre ces styles avec la PWA. Le chargement des ordinateurs doit rester
+Le site complet `/` dispose de surcharges responsive dans `src/index.css`
+limitees a 768 px. La PWA utilise exactement cette meme interface. Garder le
+rendu historique au-dessus de cette largeur. Le chargement des ordinateurs doit rester
 visible au demarrage/apres connexion et lors d'une actualisation explicite, sans
 afficher prematurement une liste vide ni animer le polling silencieux.
 
-- `/` reste le panel complet historique sans redirection par largeur d'ecran.
-- `/mobile/` est une seconde application minimale avec une tuile par machine.
-- Rouge = `offline`, vert = `online`, orange = transition, gris = `unknown`.
-- Le reveil passe immediatement en orange puis attend un etat strict `online`.
-- L'arret exige confirmation, permission, liaison et agent en ligne.
-- Le manifeste, le worker, les icones, les bundles et le stockage transitoire
-  portent tous un perimetre mobile distinct.
-- Le worker `/mobile/sw.js` a le scope `/mobile/` et ne doit jamais controler `/`.
-- Ne jamais cacher/rejouer les appels API ni utiliser Background Sync.
-- Polling 15 secondes stable, 3 secondes en transition, uniquement onglet visible.
+- `/` est l'unique application complete, sans redirection par largeur d'ecran.
+- `/mobile/` redirige vers `/`; ne pas recreer de seconde application ou build.
+- Une fois actif, le worker racine redirige aussi les chemins exacts `/mobile`,
+  `/mobile/` et `/mobile/index.html` vers `/`, y compris hors ligne.
+- Le manifeste principal est `/manifest.json`, avec `start_url` et `scope` a `/`.
+  Son `id` reste `/mobile/` uniquement pour conserver l'identite d'installation
+  historique; ce n'est ni une route d'application ni le scope du worker.
+- `/mobile/manifest.json` reste disponible avec un contenu equivalent pour les
+  anciennes installations. Preserver aussi les anciennes icones mobiles.
+- `src/main.tsx` enregistre `/sw.js` avec le scope `/` en production. Ne jamais
+  reutiliser l'ancien nettoyage qui desinscrivait le worker racine.
+- `/mobile/sw.js` est un tombstone: purge cible des caches mobiles, desinscription
+  du worker mobile et navigation des seuls clients `/mobile/` vers `/`.
+- Le nettoyage de l'entree React cible seulement l'ancienne inscription mobile
+  et les anciens stockages de transitions Wake; pas les sessions ni les caches
+  d'autres applications.
+- Le worker racine utilise `shinedewake-full-shell-<buildhash>` et une liste
+  explicite de fichiers statiques generee au build. `/` et `/index.html` sont
+  traites en network-first, avec `/index.html` comme repli hors ligne; seuls les
+  fichiers statiques prelistes utilisent cache-first.
+- Ne jamais mettre en cache les API Wake/Auth, les sessions, les donnees machines
+  ou les commandes. Aucun rejeu, file hors ligne ou Background Sync.
+- Le client Wake utilise aussi `cache: "no-store"` pour ses appels HTTP.
+- Polling HTTP toutes les 15 secondes, uniquement onglet visible; les droits
+  serveur, l'authentification et les conditions d'arret ne changent pas en PWA.
 
 ## Temps reel
 
@@ -153,12 +171,14 @@ afficher prematurement une liste vide ni animer le polling silencieux.
 
 Le frontend utilise React 19.3, Vite 8.3 et TypeScript 7.0. Les builds sont
 verifies avec Node.js 24 LTS. Utiliser `npm ci` pour reproduire le lockfile.
-Garder `resolve.dedupe` pour React/React DOM dans les deux configs Vite afin
+Garder `resolve.dedupe` pour React/React DOM dans la configuration Vite afin
 d'eviter une seconde instance issue des modules Auth voisins.
 
 ```powershell
 cd P:\DEV\GitHub\App-ShinedeWake
 npm run build
+npm run test:pwa
+node --check dist\sw.js
 node --check public\mobile\sw.js
 git -c safe.directory=* diff --check
 rg -n "password|passwd|secret|BEGIN (RSA|OPENSSH|PRIVATE)|api_key|token" P:\DEV\GitHub\App-ShinedeWake
@@ -175,9 +195,11 @@ Smoke test conseille:
 - panneau permissions si gestionnaire;
 - absence d'appel navigateur vers `/corelink/`;
 - absence des actions veille, mesure et redemarrage.
-- `/` conserve le dashboard, la gestion et les metriques sans worker mobile;
-- `/mobile/` couvre reveil, confirmation d'arret, transitions et etat inconnu;
-- le shell mobile fonctionne hors ligne sans rendre les commandes actionnables.
+- navigateur et PWA conservent le dashboard complet, la gestion et les metriques;
+- `/mobile/` redirige vers `/`, y compris apres migration d'une ancienne PWA;
+- le worker racine et son cache statique fonctionnent hors ligne sans cache API;
+- les reponses refusees et les permissions par ordinateur restent appliquees;
+- les tests de commandes utilisent des reponses simulees, sans reveil ni arret reel.
 
 ## Deploiement
 
@@ -197,8 +219,20 @@ Ne pas deployer:
 Preserver uniquement les artefacts publics necessaires (`index.html`, `assets\`,
 `favicon.png` ou autres fichiers publics issus du build).
 
-Le panel racine doit conserver l'interface historique. Le second build ecrit
-dans `dist\mobile\` sans vider `dist`. En production, copier les assets mobiles
-avant `mobile\index.html` et `mobile\sw.js`; conserver le tombstone historique
-versionne `/sw.js` tant que d'anciennes inscriptions de scope `/` peuvent
-subsister.
+Le build unique produit le panel complet installable a la racine. Copier les
+assets et icones avant les fichiers HTML et manifestes. Verifier que tous les
+fichiers de la liste de precache sont presents, puis publier les workers en
+dernier; ne pas deployer le modele `public/sw.js` sans l'injection du build.
+
+Le deploiement est additif: conserver les fichiers de compatibilite
+`mobile/index.html`, `mobile/manifest.json`, `mobile/sw.js`, `mobile/icons/` et
+les anciens `mobile/assets/` encore utiles aux clients non migres. Ne pas
+supprimer recursivement `mobile/`, ni synchroniser avec suppression automatique.
+Un nettoyage ulterieur exige une verification ciblee des references et des
+clients; les bundles devenus inutiles pourront alors etre archives hors de
+`PROD`, de facon recuperable.
+
+La migration d'une ancienne PWA exige une connexion et peut demander une
+reouverture; l'ancien cache peut encore apparaitre avant la mise a jour. L'id
+`/mobile/` preserve l'installation mobile recente, mais une tres ancienne PWA
+racine identifiee par `/` peut rester une installation distincte du navigateur.

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "build": "tsc && vite build && vite build --config vite.mobile.config.ts",
-    "preview": "vite preview"
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test:pwa": "node --test tests/pwa.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.48.0",

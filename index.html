@@ -6,6 +6,14 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0"
     />
+    <meta name="theme-color" content="#0f1014" />
+    <meta name="description" content="Réveiller, superviser et éteindre vos ordinateurs autorisés." />
+    <meta name="application-name" content="ShinedeWake" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Wake" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link
       rel="preconnect"
       href="https://fonts.googleapis.com"
@@ -32,32 +40,5 @@
       type="module"
       src="/src/main.tsx"
     ></script>
-    <script>
-      // Preserve the cleanup of the retired root PWA on desktop deployments.
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          void (async () => {
-            const wakeScope = `${window.location.origin}/`;
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(
-              registrations.filter((registration) => registration.scope === wakeScope)
-                .map((registration) => registration.unregister())
-            );
-            if ("caches" in window) {
-              const cacheNames = await window.caches.keys();
-              await Promise.all(
-                cacheNames.filter((name) => name.startsWith("shinedewake-shell-"))
-                  .map((name) => window.caches.delete(name))
-              );
-            }
-          })().catch(() => undefined);
-        });
-      }
-      try {
-        window.localStorage.removeItem("shinedewake.pending-actions.v1");
-      } catch {
-        // Storage is optional.
-      }
-    </script>
   </body>
 </html>

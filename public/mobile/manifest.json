@@ -1,29 +1,29 @@
 {
   "id": "/mobile/",
-  "name": "ShinedeWake Mobile",
+  "name": "ShinedeWake",
   "short_name": "Wake",
-  "description": "Allumer et éteindre rapidement les machines Wake.",
+  "description": "Réveiller, superviser et éteindre vos ordinateurs autorisés.",
   "lang": "fr-CH",
-  "start_url": "/mobile/",
-  "scope": "/mobile/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#08090d",
-  "theme_color": "#08090d",
+  "background_color": "#0f1014",
+  "theme_color": "#0f1014",
   "icons": [
     {
-      "src": "/mobile/icons/pwa-192x192.png",
+      "src": "/icons/pwa-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/mobile/icons/pwa-512x512.png",
+      "src": "/icons/pwa-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/mobile/icons/maskable-512x512.png",
+      "src": "/icons/maskable-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"

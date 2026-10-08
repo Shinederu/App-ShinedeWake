@@ -3,7 +3,7 @@
 Frontend React/Vite du panel Wake. Il constitue l'interface unique pour
 reveiller une machine, consulter son agent systeme et demander son extinction.
 
-Documentation mise a jour le 2026-10-06.
+Documentation mise a jour le 2026-10-08.
 
 ## Role
 
@@ -18,16 +18,15 @@ ShinedeWake permet aux utilisateurs autorises de:
 - rejoindre la gestion des acces par ordinateur dans les permissions du domaine
   avec un compte admin global Core.
 
-Deux surfaces coexistent sans redirection automatique:
-
-- `/`: panel complet historique, adapte au poste de travail;
-- `/mobile/`: PWA volontairement minimale avec une tuile d'action par machine.
+Une seule interface complete est disponible dans le navigateur et en PWA
+installable a la racine `/`. L'ancienne URL `/mobile/` redirige vers `/` et ne
+charge plus d'application simplifiee.
 
 Le site complet `/` garde son rendu historique au-dessus de 768 px. Sur
 telephone (768 px et moins), les commandes d'en-tete sont groupees, les
 informations reseau/metriques passent sur deux colonnes et les formulaires
-restent utilisables sans debordement horizontal. La PWA `/mobile/` est distincte
-et n'est pas modifiee par ces styles.
+restent utilisables sans debordement horizontal. La PWA utilise cette meme
+interface et ces memes styles, sans disposition simplifiee distincte.
 
 Un indicateur anime et un message accompagnent la verification de session puis
 le chargement des ordinateurs, y compris apres connexion. Les actualisations
@@ -61,7 +60,8 @@ action exige un besoin concret et une revue conjointe des contrats Wake/Corelink
 - Source DEV: `P:\DEV\GitHub\App-ShinedeWake`
 - Runtime PROD: `P:\PROD\ShinedeWake`
 - URL publique attendue: `https://wake.shinederu.ch`
-- URL PWA mobile: `https://wake.shinederu.ch/mobile/`
+- URL PWA: `https://wake.shinederu.ch/`
+- Ancienne URL mobile: `https://wake.shinederu.ch/mobile/`, redirige vers `/`
 - API Wake: `https://api.shinederu.ch/wake/`
 - API Auth: `https://api.shinederu.ch/auth/`
 - Backend source: `P:\DEV\GitHub\App-ShinedeWake-API`
@@ -72,11 +72,9 @@ Le deploiement frontend copie uniquement le contenu de `dist\` vers
 
 ## Structure
 
-- `src\App.tsx`: application principale, appareils, agent systeme et actions.
-- `src\MobileApp.tsx`: interface mobile minimale et transitions Wake/arret.
-- `src\mobile.tsx`: entree React et enregistrement du worker mobile.
-- `src\mobile.css`: styles charges uniquement par l'entree mobile.
-- `mobile\index.html`: page HTML distincte de la PWA.
+- `src\App.tsx`: application complete unique, appareils, agent systeme et actions.
+- `src\main.tsx`: entree React et enregistrement du worker racine en production.
+- `index.html`: entree HTML unique avec manifeste et icones PWA.
 - `src\lib\api.ts`: client HTTP Wake unique pour les fonctions machine.
 - `src\lib\authClient.ts`: client auth commun.
 - `src\types\api.ts`: contrats de l'API Wake, dont `WakeSystemAgent`.
@@ -85,9 +83,12 @@ Le deploiement frontend copie uniquement le contenu de `dist\` vers
   vers la gestion centralisee du domaine.
 - `src\index.css`: styles de l'application.
 - `public\`: assets publics inclus au build.
-- `public\mobile\`: manifeste, worker et icones strictement scopes a `/mobile/`.
-- `public\sw.js`: tombstone racine qui neutralise uniquement l'ancienne PWA.
-- `vite.mobile.config.ts`: second build avec base et assets sous `/mobile/`.
+- `public\manifest.json` et `public\icons\`: manifeste et icones PWA.
+- `public\sw.js`: modele du worker racine, finalise pendant le build.
+- `public\mobile\`: redirection vers `/`, manifeste de compatibilite, tombstone
+  du worker mobile et icones historiques.
+- `vite.config.ts` et `build\pwa.ts`: build unique et generation du worker dans
+  `closeBundle`, avec hash de version et liste explicite des fichiers statiques.
 - `dist\`: artefacts generes par Vite, seuls fichiers deployables en PROD.
 
 Les anciens fichiers `src\lib\corelinkApi.ts` et `src\types\corelink.ts` ont ete
@@ -187,7 +188,7 @@ invites a contacter un admin global.
 
 Le bouton d'arret reste desactive sans permission, sans agent en ligne,
 lorsqu'un job d'arret est actif ou pendant le court delai d'arret deja programme.
-Les deux interfaces effacent les machines et confirmations devenues interdites
+L'interface efface les machines et donnees d'edition devenues interdites
 des qu'un statut ou une reponse de refus est recu. Les reponses de commandes ne
 reinjectent jamais une machine dans la liste; seule sa relecture filtree le peut.
 
@@ -219,32 +220,57 @@ Etat actuel:
 - publications Mercure Wake suspendues tant qu'un contrat d'abonnement
   respectant les droits par ordinateur n'est pas disponible.
 
-La PWA mobile rafraichit toutes les 15 secondes en etat stable et toutes les
-3 secondes pendant un demarrage ou un arret. Une transition visuelle locale
-expire apres 120 secondes et ne rejoue jamais une commande HTTP.
-
-## PWA mobile
-
-La PWA est limitee a `/mobile/`:
-
-- `id`, `start_url` et `scope` valent `/mobile/`;
-- son service worker est servi a `/mobile/sw.js` et ne controle pas `/`;
-- ses bundles sont produits dans `/mobile/assets/`;
-- seul le shell statique mobile est disponible hors ligne;
-- les API Wake/Auth et toutes les commandes POST restent strictement reseau;
-- aucun Background Sync ni rejeu differe n'est utilise.
-
-Etats de tuile:
-
-- rouge: machine `offline`, action de reveil;
-- vert: machine `online`, ouverture de la confirmation d'arret si disponible;
-- orange: demarrage ou extinction en cours;
-- gris: etat `unknown`, aucune commande.
-
 Ne pas reactiver les anciens evenements publics `wake.device.*` ou le topic
 global: ils exposeraient des machines aux comptes qui n'y ont pas acces.
 Une future integration doit filtrer les abonnements par ordinateur, garder la
 resynchronisation HTTP et ne jamais declencher de commande critique via Mercure.
+
+## PWA unique
+
+La PWA installee ouvre le panel complet `/`, avec la meme UI responsive, les
+memes appels API et les memes permissions que le navigateur. Il n'existe plus
+de seconde application mobile ni de second build Vite.
+
+- manifeste principal: `/manifest.json`;
+- `start_url` et `scope`: `/`;
+- `id`: `/mobile/`, conserve comme identifiant opaque des installations
+  historiques, sans limiter le demarrage ou le scope a cette ancienne URL;
+- icones principales: `/icons/`;
+- worker: `/sw.js`, enregistre avec le scope `/` en production uniquement;
+- cache: `shinedewake-full-shell-<buildhash>`, dont la version et la liste
+  explicite de fichiers statiques sont injectees a la fin du build.
+
+Le worker traite `/` et `/index.html` en network-first. En cas d'indisponibilite
+reseau, il peut fournir `/index.html` depuis le precache et les fichiers
+statiques prelistes (dont assets et icones) en cache-first. Seul le shell
+statique est disponible hors ligne:
+aucune session, liste de machines, metrique ou reponse d'API n'est mise en cache.
+Les API Wake/Auth et les commandes exigent le reseau. Aucun Background Sync,
+rejeu de commande ou file d'attente hors ligne n'est utilise.
+Le client HTTP Wake demande aussi `cache: "no-store"`.
+
+### Migration des anciennes installations
+
+`/mobile/index.html` est une redirection de compatibilite vers `/`.
+Le worker racine redirige lui aussi les chemins exacts `/mobile`, `/mobile/`
+et `/mobile/index.html` vers `/`, meme hors ligne une fois ce worker actif.
+`/mobile/manifest.json` reste servi avec un contenu equivalent au manifeste
+principal et le meme identifiant d'installation. Les anciennes icones sous
+`/mobile/icons/` sont conservees pour les raccourcis existants.
+
+`/mobile/sw.js` est desormais un tombstone: il supprime uniquement les caches
+mobiles concernes, desinscrit son propre worker et navigue les seuls clients
+de l'ancienne URL `/mobile/` vers `/`. L'entree React nettoie aussi uniquement
+l'ancienne inscription mobile et les stockages legacy de transitions Wake,
+sans effacer les sessions ni les caches d'autres applications.
+
+La premiere migration d'une ancienne installation necessite une connexion et
+peut demander une reouverture. Un ancien cache peut encore afficher l'ancienne
+interface avant la mise a jour du worker. L'identifiant `/mobile/` preserve
+l'installation mobile recente; une tres ancienne PWA racine identifiee par `/`
+peut rester une installation distincte, selon le navigateur.
+Ne pas retablir l'ancien code qui desinscrivait le worker racine: `/sw.js`
+heberge maintenant la PWA complete.
 
 ## Dependances inter-projets
 
@@ -270,7 +296,7 @@ Le build utilise des alias Vite vers:
 - Node.js 24 LTS utilise pour les builds, avec les types Node 24.
 - Installer les versions verrouillees avec `npm ci`, puis `npm run build`.
 
-Les deux configurations Vite dedupliquent React et React DOM pour les modules
+La configuration Vite deduplique React et React DOM pour les modules
 Auth importes depuis les depots voisins. Ne pas modifier ces modules pour
 mettre a jour les dependances de Wake.
 
@@ -300,6 +326,8 @@ dans un `.env` frontend.
 ```powershell
 cd P:\DEV\GitHub\App-ShinedeWake
 npm run build
+npm run test:pwa
+node --check dist\sw.js
 node --check public\mobile\sw.js
 git -c safe.directory=* diff --check
 rg -n "password|passwd|secret|BEGIN (RSA|OPENSSH|PRIVATE)|api_key|token" P:\DEV\GitHub\App-ShinedeWake
@@ -317,18 +345,26 @@ Smoke test manuel apres deploiement:
    permissions du domaine avec un admin global;
 8. verifier l'absence de requete navigateur vers `/corelink/`;
 9. verifier l'absence des actions veille, mesure et redemarrage.
-10. ouvrir `/mobile/` et verifier rouge -> orange -> vert;
-11. verifier vert -> modale, `Non` sans POST et `Oui` -> orange -> rouge;
-12. verifier que `/` n'a ni manifeste ni service worker mobile;
-13. verifier le demarrage hors ligne du shell `/mobile/` sans cache API.
+10. installer la PWA depuis `/` et verifier qu'elle ouvre le panel complet;
+11. ouvrir `/mobile/` et verifier la redirection vers `/`, sans second bundle;
+12. verifier `/manifest.json`, le worker `/sw.js` de scope `/` et le cache
+    statique versionne;
+13. verifier le demarrage hors ligne du shell sans cache API, session ou donnees
+    machines; les commandes ne doivent jamais etre rejouees au retour du reseau;
 14. avec un compte autorise uniquement pour Gooba, verifier l'absence de BooTao
-    dans les deux interfaces, puis la disparition de Gooba apres revocation;
+    dans le navigateur et la PWA, puis la disparition de Gooba apres revocation;
 15. verifier qu'un admin global Core garde toutes les machines et que les
     anciennes routes de gestion des acces Wake ne sont jamais appelees;
 16. verifier qu'une creation recharge la liste filtree sans donner
     automatiquement acces au nouvel ordinateur.
 17. verifier que l'identite technique d'une machine existante est en lecture
     seule pour un gestionnaire non global et editable pour un admin global Core.
+18. simuler une ancienne PWA `/mobile/`, verifier sa migration, la disparition
+    de son worker/cache et la preservation des caches hors perimetre;
+19. verifier le rendu desktop et responsive sans changement de disposition.
+
+Pour les verifications automatisees, simuler les reponses API et les commandes:
+ne pas reveiller ou eteindre une machine reelle pour tester la PWA.
 
 ## Deploiement
 
@@ -342,19 +378,36 @@ deployer `.git`, les sources, `.env*`, `node_modules`, docs, tests ou caches.
 Avant de supprimer d'anciens assets, verifier que le nouvel `index.html` ne les
 reference plus.
 
-Le build produit le panel historique a la racine puis la PWA dans
-`dist\mobile\`. Deployer les assets mobiles avant `mobile\index.html` et
-`mobile\sw.js`. Le tombstone historique `/sw.js` est versionne et doit rester en
-production pour neutraliser l'ancienne PWA racine; il ne doit jamais etre
-remplace par le worker mobile.
+Le build unique produit le panel complet installable a la racine et les seuls
+fichiers de compatibilite dans `dist\mobile\`.
 
-Le nettoyage de l'ancienne inscription racine et de son cache est aussi
-conserve dans l'entree HTML desktop, sans toucher au scope `/mobile/`.
+Ordre de copie:
+
+1. publier les assets et icones;
+2. publier les fichiers HTML et manifestes, y compris ceux de compatibilite;
+3. verifier que chaque fichier de la liste de precache du worker final est
+   present et disponible;
+4. publier les workers en dernier. Deployer `dist/sw.js`, jamais directement
+   le modele `public/sw.js` qui n'a pas encore sa liste injectee.
+
+Le deploiement est additif: preserver `mobile/index.html`,
+`mobile/manifest.json`, `mobile/sw.js`, `mobile/icons/` et les anciens bundles
+`mobile/assets/` pour les installations pas encore migrees. La nouvelle entree
+mobile ne sert plus la vue simplifiee, mais des clients anciens peuvent encore
+avoir besoin de ses assets pendant leur mise a jour. Ne pas supprimer tout le
+dossier `mobile/` ni utiliser une synchronisation avec suppression automatique.
+
+Un nettoyage des anciens bundles est une operation ulterieure distincte:
+verifier les references, les clients concernes et les chemins exacts avant
+d'archiver les seuls fichiers devenus inutiles hors de `PROD`, de facon
+recuperable.
 
 ## Notes de reprise
 
-- Etat documente le 2026-10-06.
+- Etat documente le 2026-10-08.
 - Wake est le produit et l'API navigateur uniques.
+- Le navigateur et la PWA partagent l'application complete racine. L'ancienne
+  interface mobile simplifiee est retiree; `/mobile/` reste une compatibilite.
 - Arcadia ne fait plus partie du contrat.
 - Les migrations de permissions sont documentees dans le README de
   `App-ShinedeWake-API`. La migration par ordinateur repart sans attribution

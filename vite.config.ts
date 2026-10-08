@@ -1,9 +1,10 @@
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
+import { completeAppPwa } from "./build/pwa.ts";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), completeAppPwa()],
   server: {
     fs: {
       allow: [".."],

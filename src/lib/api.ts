@@ -59,6 +59,7 @@ const request = async <T>(method: string, action: string, payload?: Record<strin
     response = await fetch(url.toString(), {
       method,
       credentials: "include",
+      cache: "no-store",
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",

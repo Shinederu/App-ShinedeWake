@@ -4,10 +4,11 @@
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "rewriteRelativeImportExtensions": true
   },
   "include": [
     "vite.config.ts",
-    "vite.mobile.config.ts"
+    "build/**/*.ts"
   ]
 }
